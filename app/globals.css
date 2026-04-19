@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Olympus Night — Design System Tokens
+   All CSS custom properties used by the themed UI components.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  /* Gold palette */
+  --oly-gold-dim:     #7A5C10;
+  --oly-gold:         #C9A227;
+  --oly-gold-bright:  #EFC050;
+  --oly-gold-shimmer: #FFE8A0;
+
+  /* Night sky */
+  --oly-night-base:    #03030E;
+  --oly-night-mid:     #07071E;
+  --oly-night-surface: #0D0D30;
+
+  /* Marble / stone */
+  --oly-marble:        rgba(255, 250, 235, 0.88);
+  --oly-marble-border: rgba(210, 190, 140, 0.35);
+  --oly-stone-light:   rgba(200, 185, 155, 0.18);
+
+  /* Glow box-shadows */
+  --oly-glow-gold:        0 0 18px rgba(201,162,39,0.45), 0 0 50px rgba(201,162,39,0.18);
+  --oly-glow-gold-strong: 0 0 28px rgba(240,192,64,0.65), 0 0 70px rgba(201,162,39,0.28);
+  --oly-glow-portal:      0 0 35px rgba(120,80,220,0.55), 0 0 70px rgba(80,40,180,0.30), inset 0 0 35px rgba(120,80,220,0.20);
+  --oly-glow-emerald:     0 0 18px rgba(52,211,153,0.35), 0 0 45px rgba(52,211,153,0.12);
+  --oly-glow-cyan:        0 0 18px rgba(34,211,238,0.35), 0 0 45px rgba(34,211,238,0.12);
+
+  /* Transition durations */
+  --oly-transition-fast:   150ms;
+  --oly-transition-medium: 300ms;
+  --oly-transition-slow:   600ms;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Olympus Night — Keyframe Animations
+   ───────────────────────────────────────────────────────────── */
+
+/* Gold shimmer sweep — for title text and buttons */
+@keyframes oly-shimmer {
+  0%   { background-position: -250% center; }
+  100% { background-position:  250% center; }
+}
+
+/* Gentle breathing glow — for borders and glows */
+@keyframes oly-pulse-glow {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1;   }
+}
+
+/* Slow vertical float — for decorative icons / emblems */
+@keyframes oly-float {
+  0%, 100% { transform: translateY(0);    }
+  50%       { transform: translateY(-10px); }
+}
+
+/* Cloud / wisp drift — slow lateral movement */
+@keyframes oly-cloud-drift {
+  0%, 100% { transform: translateX(0)    translateY(0);   opacity: 0.45; }
+  33%       { transform: translateX(2.5%) translateY(-8px); opacity: 0.62; }
+  66%       { transform: translateX(-1.5%) translateY(4px); opacity: 0.40; }
+}
+
+/* Mist expansion — slow scale + opacity breathe */
+@keyframes oly-mist-drift {
+  0%, 100% { transform: translateX(0)  scaleX(1);    opacity: 0.32; }
+  50%       { transform: translateX(4%) scaleX(1.06); opacity: 0.52; }
+}
+
+/* Star twinkle */
+@keyframes oly-star-twinkle {
+  0%, 100% { opacity: 0.2;  transform: scale(1);   }
+  50%       { opacity: 0.95; transform: scale(1.7); }
+}
+
+/* Ember / particle rise */
+@keyframes oly-ember-rise {
+  0%   { transform: translateY(0)    translateX(0);                         opacity: 0;    }
+  12%  { opacity: 0.9; }
+  80%  { opacity: 0.35; }
+  100% { transform: translateY(-100px) translateX(var(--oly-drift, 12px));  opacity: 0;    }
+}
+
+/* Transition overlay — cloud wipe */
+@keyframes oly-cloud-wipe-in {
+  0%   { transform: translateX(-100%) skewX(-6deg); opacity: 0.6; }
+  100% { transform: translateX(0)      skewX(0deg);  opacity: 1;   }
+}
+@keyframes oly-cloud-wipe-out {
+  0%   { transform: translateX(0)     skewX(0deg);  opacity: 1;   }
+  100% { transform: translateX(100%)  skewX(6deg);  opacity: 0.6; }
+}
+
+/* Transition overlay — blur fade */
+@keyframes oly-blur-fade-in {
+  0%   { opacity: 0; filter: blur(12px); }
+  100% { opacity: 1; filter: blur(0);    }
+}
+@keyframes oly-blur-fade-out {
+  0%   { opacity: 1; filter: blur(0);    }
+  100% { opacity: 0; filter: blur(12px); }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Olympus Night — Utility classes
+   Opt-in helpers consumed by themed components.
+   ───────────────────────────────────────────────────────────── */
+
+/* Gold shimmer text gradient */
+.oly-text-gold-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--oly-gold-dim)     0%,
+    var(--oly-gold-bright)  30%,
+    var(--oly-gold-shimmer) 50%,
+    var(--oly-gold-bright)  70%,
+    var(--oly-gold-dim)     100%
+  );
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: oly-shimmer 5s linear infinite;
+}
+
+/* Gold glowing border */
+.oly-border-gold {
+  border-color: rgba(201, 162, 39, 0.45);
+  box-shadow: var(--oly-glow-gold);
+}
+.oly-border-gold:hover {
+  border-color: rgba(240, 192, 64, 0.65);
+  box-shadow: var(--oly-glow-gold-strong);
+}
+
+/* Portal circle frame */
+.oly-portal-frame {
+  box-shadow: var(--oly-glow-portal);
+  border: 2px solid rgba(150, 100, 255, 0.45);
+  animation: oly-pulse-glow 3.5s ease-in-out infinite;
+}
+
+/* Marble panel */
+.oly-panel-marble {
+  background: linear-gradient(
+    160deg,
+    rgba(30, 25, 50, 0.92) 0%,
+    rgba(15, 12, 35, 0.96) 100%
+  );
+  border: 1px solid var(--oly-marble-border);
+  backdrop-filter: blur(8px);
+}
+
+/* Dark glass panel */
+.oly-panel-glass {
+  background: rgba(10, 8, 25, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+/* Gold button pulse */
+.oly-btn-gold {
+  background: linear-gradient(
+    135deg,
+    var(--oly-gold-dim)    0%,
+    var(--oly-gold)        50%,
+    var(--oly-gold-bright) 100%
+  );
+  box-shadow: var(--oly-glow-gold);
+  color: #0a0800;
+  transition: box-shadow var(--oly-transition-fast), filter var(--oly-transition-fast);
+}
+.oly-btn-gold:hover:not(:disabled) {
+  box-shadow: var(--oly-glow-gold-strong);
+  filter: brightness(1.1);
+}
+.oly-btn-gold:disabled {
+  background: rgb(50, 45, 60);
+  box-shadow: none;
+  color: rgba(255,255,255,0.3);
+}
