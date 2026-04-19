@@ -54,6 +54,7 @@ export interface QuizEntry {
   title?: string | null;
   artist?: string | null;
   category?: string | null;
+  creator?: string | null;
   youtube_video_id: string;
   clip_start_seconds: number;
   clip_end_seconds: number;
@@ -90,6 +91,7 @@ export interface RoundAnswer {
   round_id: string;
   player_id: string;
   answer_text: string;
+  answered_after_ms?: number | null;
   created_at?: string;
 }
 
@@ -100,6 +102,8 @@ export interface LeaderboardEntry {
   score: number;
   correctCount: number;
   answeredCount: number;
+  avgAnswerMs?: number | null;
+  lastRoundAnswerMs?: number | null;
 }
 
 export interface PlayerSession {

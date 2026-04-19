@@ -99,6 +99,12 @@ alter table public.rooms add constraint rooms_status_check
 
 alter table public.room_players add column if not exists worthy_vote boolean null default null;
 
+-- Speed-score: milliseconds elapsed from clip_playing start to answer submission (client-side)
+alter table public.answers add column if not exists answered_after_ms bigint null;
+
+-- Creator attribution: who added this quiz entry (not shown in-game)
+alter table public.quiz_entries add column if not exists creator text null;
+
 alter table public.rounds drop constraint if exists rounds_state_check;
 alter table public.rounds add constraint rounds_state_check
   check (state in ('queued', 'active', 'clip_playing', 'answering', 'revealed', 'leaderboard', 'closed'));

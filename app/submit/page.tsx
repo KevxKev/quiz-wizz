@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { OlympusBackground } from "@/components/ui";
 
@@ -15,7 +15,6 @@ import {
 import {
   formatSupabaseErrorMessage,
   getSupabaseBrowserClient,
-  getSupabaseProjectHost,
   getSupabaseSetupMessage,
   isSupabaseSchemaError,
 } from "@/lib/supabase";
@@ -27,40 +26,65 @@ const DEFAULT_OPTIONS = ["", "", "", ""];
 
 export default function SubmitPage() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
-  const supabaseProjectHost = getSupabaseProjectHost();
+  const lastFetchedVideoIdRef = useRef<string | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState("https://www.youtube.com/watch?v=M7lc1UVf-VE");
   const [startTimeInput, setStartTimeInput] = useState("00:00");
-  const [endTimeInput, setEndTimeInput] = useState("00:15");
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("audio-video");
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
+  const [creator, setCreator] = useState("");
   const [category, setCategory] = useState("Music");
   const [questionText, setQuestionText] = useState("Which artist performs this clip?");
   const [answerOptions, setAnswerOptions] = useState<string[]>([...DEFAULT_OPTIONS]);
   const [correctAnswer, setCorrectAnswer] = useState("");
   const [statusMessage, setStatusMessage] = useState("Create a real quiz entry here, then start a room round from `/host`.");
   const [isSaving, setIsSaving] = useState(false);
+  const [isFetchingMeta, setIsFetchingMeta] = useState(false);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   const [savedEntries, setSavedEntries] = useState<QuizEntry[]>([]);
   const [editingEntry, setEditingEntry] = useState<QuizEntry | null>(null);
 
   const parsedVideoId = useMemo(() => parseYouTubeVideoId(youtubeUrl), [youtubeUrl]);
   const startSeconds = useMemo(() => parseClockInputToSeconds(startTimeInput), [startTimeInput]);
-  const endSeconds = useMemo(() => parseClockInputToSeconds(endTimeInput), [endTimeInput]);
+  // End time is always start + 15 seconds — fixed snippet length
+  const endSeconds = startSeconds !== null ? startSeconds + 15 : null;
 
   const validationMessage = useMemo(() => {
     if (!parsedVideoId) {
       return "Enter a valid YouTube URL or raw 11-character video ID.";
     }
 
-    if (startSeconds === null || endSeconds === null) {
-      return "Use `mm:ss` format for the clip times, for example `00:10` or `01:05`.";
+    if (startSeconds === null) {
+      return "Use `mm:ss` format for the start time, for example `00:10` or `01:05`.";
     }
 
-    return validateClipRange(startSeconds, endSeconds);
-  }, [endSeconds, parsedVideoId, startSeconds]);
+    return null;
+  }, [parsedVideoId, startSeconds]);
 
   const usableOptions = answerOptions.map((option) => option.trim()).filter(Boolean);
+
+  // Auto-fetch video title and artist from YouTube oEmbed when a valid video ID is pasted
+  useEffect(() => {
+    if (!parsedVideoId || parsedVideoId === lastFetchedVideoIdRef.current) return;
+    lastFetchedVideoIdRef.current = parsedVideoId;
+    setIsFetchingMeta(true);
+    fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${parsedVideoId}&format=json`)
+      .then((r) => r.json() as Promise<{ title?: string; author_name?: string }>)
+      .then((data) => {
+        const videoTitle = data.title ?? "";
+        const channelName = data.author_name ?? "";
+        const dashIdx = videoTitle.indexOf(" - ");
+        if (dashIdx !== -1) {
+          setArtist(videoTitle.slice(0, dashIdx).trim());
+          setTitle(videoTitle.slice(dashIdx + 3).trim());
+        } else {
+          setTitle(videoTitle);
+          setArtist(channelName);
+        }
+      })
+      .catch(() => { /* silently fail */ })
+      .finally(() => setIsFetchingMeta(false));
+  }, [parsedVideoId]);
 
   const loadSavedEntries = useCallback(async () => {
     const localEntries = readStoredQuizEntries();
@@ -101,10 +125,10 @@ export default function SubmitPage() {
     setEditingEntry(entry);
     setYoutubeUrl(`https://www.youtube.com/watch?v=${entry.youtube_video_id}`);
     setStartTimeInput(String(Math.floor((entry.clip_start_seconds ?? 0) / 60)).padStart(2, "0") + ":" + String((entry.clip_start_seconds ?? 0) % 60).padStart(2, "0"));
-    setEndTimeInput(String(Math.floor((entry.clip_end_seconds ?? 15) / 60)).padStart(2, "0") + ":" + String((entry.clip_end_seconds ?? 15) % 60).padStart(2, "0"));
     setPlaybackMode(entry.playback_mode ?? "audio-video");
     setTitle(entry.title ?? "");
     setArtist(entry.artist ?? "");
+    setCreator(entry.creator ?? "");
     setCategory(entry.category ?? "Music");
     setQuestionText(entry.prompt_text);
     const opts = [...entry.answer_options];
@@ -112,6 +136,7 @@ export default function SubmitPage() {
     setAnswerOptions(opts.slice(0, 4));
     setCorrectAnswer(entry.correct_answer ?? "");
     setStatusMessage(`Editing: ${entry.title || entry.prompt_text}`);
+    lastFetchedVideoIdRef.current = entry.youtube_video_id;
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -119,13 +144,13 @@ export default function SubmitPage() {
     setEditingEntry(null);
     setTitle("");
     setArtist("");
+    setCreator("");
     setCategory("Music");
     setQuestionText("Which artist performs this clip?");
     setAnswerOptions([...DEFAULT_OPTIONS]);
     setCorrectAnswer("");
     setYoutubeUrl("https://www.youtube.com/watch?v=M7lc1UVf-VE");
     setStartTimeInput("00:00");
-    setEndTimeInput("00:15");
     setPlaybackMode("audio-video");
     setStatusMessage("Edit cancelled. Create a new quiz entry here.");
   };
@@ -164,6 +189,11 @@ export default function SubmitPage() {
       return;
     }
 
+    if (!creator.trim()) {
+      setStatusMessage("Enter your name in the Creator field before saving.");
+      return;
+    }
+
     if (!questionText.trim()) {
       setStatusMessage("Enter the question text for this quiz entry.");
       return;
@@ -186,6 +216,7 @@ export default function SubmitPage() {
       const payload = {
         title: title.trim() || null,
         artist: artist.trim() || null,
+        creator: creator.trim(),
         category: category.trim() || null,
         youtube_video_id: parsedVideoId,
         clip_start_seconds: startSeconds,
@@ -217,6 +248,7 @@ export default function SubmitPage() {
         setStatusMessage("Quiz entry updated successfully.");
         setTitle("");
         setArtist("");
+        setCreator("");
         setCategory("Music");
         setQuestionText("Which artist performs this clip?");
         setAnswerOptions([...DEFAULT_OPTIONS]);
@@ -242,6 +274,7 @@ export default function SubmitPage() {
         setStatusMessage("Quiz entry saved to Supabase and will stay available for future rounds.");
         setTitle("");
         setArtist("");
+        setCreator("");
         setCategory("Music");
         setQuestionText("Which artist performs this clip?");
         setAnswerOptions([...DEFAULT_OPTIONS]);
@@ -252,6 +285,7 @@ export default function SubmitPage() {
       const fallbackEntry = createLocalQuizEntry({
         title: title.trim() || null,
         artist: artist.trim() || null,
+        creator: creator.trim() || null,
         category: category.trim() || null,
         youtube_video_id: parsedVideoId,
         clip_start_seconds: startSeconds ?? 0,
@@ -292,12 +326,6 @@ export default function SubmitPage() {
           </p>
         </header>
 
-        <div className={`rounded-2xl border px-4 py-3 text-sm ${supabase ? "border-white/10 bg-black/25 text-slate-300" : "border-amber-500/40 bg-amber-500/10 text-amber-50"}`}>
-          {supabase
-            ? `Supabase detected: yes (${supabaseProjectHost ?? "project URL loaded"}). Real quiz entry storage is ready.`
-            : getSupabaseSetupMessage()}
-        </div>
-
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
           <section
             className="rounded-3xl p-6"
@@ -331,19 +359,6 @@ export default function SubmitPage() {
               </div>
 
               <div>
-                <label htmlFor="end-time" className="mb-2 block text-sm font-semibold text-slate-200">
-                  End time (`mm:ss`)
-                </label>
-                <input
-                  id="end-time"
-                  type="text"
-                  value={endTimeInput}
-                  onChange={(event) => setEndTimeInput(event.target.value)}
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
-                />
-              </div>
-
-              <div>
                 <label htmlFor="playback-mode" className="mb-2 block text-sm font-semibold text-slate-200">
                   Play mode
                 </label>
@@ -361,7 +376,7 @@ export default function SubmitPage() {
 
               <div>
                 <label htmlFor="entry-title" className="mb-2 block text-sm font-semibold text-slate-200">
-                  Title / clip label (optional)
+                  Song title {isFetchingMeta ? <span className="text-[10px] font-normal text-slate-400">(fetching…)</span> : null}
                 </label>
                 <input
                   id="entry-title"
@@ -375,7 +390,7 @@ export default function SubmitPage() {
 
               <div>
                 <label htmlFor="artist" className="mb-2 block text-sm font-semibold text-slate-200">
-                  Artist (optional)
+                  Artist {isFetchingMeta ? <span className="text-[10px] font-normal text-slate-400">(fetching…)</span> : null}
                 </label>
                 <input
                   id="artist"
@@ -383,6 +398,20 @@ export default function SubmitPage() {
                   value={artist}
                   onChange={(event) => setArtist(event.target.value)}
                   placeholder="Rick Astley"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="creator" className="mb-2 block text-sm font-semibold text-slate-200">
+                  Created by <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  id="creator"
+                  type="text"
+                  value={creator}
+                  onChange={(event) => setCreator(event.target.value)}
+                  placeholder="Your name"
                   className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
                 />
               </div>
@@ -452,7 +481,7 @@ export default function SubmitPage() {
             <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${validationMessage ? "border-rose-500/40 bg-rose-500/10 text-rose-100" : "border-white/10 bg-black/25 text-slate-300"}`}>
               {validationMessage
                 ? validationMessage
-                : `Video ID: ${parsedVideoId} • ${startSeconds}s → ${endSeconds}s • ${getPlaybackModeLabel(playbackMode)}`}
+                : `Video ID: ${parsedVideoId} • starts at ${startSeconds}s • 15s clip • ${getPlaybackModeLabel(playbackMode)}`}
             </div>
 
             <div className="mt-4 rounded-2xl border border-white/8 bg-black/25 p-4 text-sm text-slate-300">
@@ -546,10 +575,10 @@ export default function SubmitPage() {
                         </div>
                       </div>
                       <p className="mt-2 text-xs text-slate-500">
-                        {entry.youtube_video_id} • {entry.clip_start_seconds}s → {entry.clip_end_seconds}s • {getPlaybackModeLabel(entry.playback_mode)}
+                        {entry.youtube_video_id} • starts {entry.clip_start_seconds}s • 15s clip • {getPlaybackModeLabel(entry.playback_mode)}
                       </p>
                       <p className="mt-1 text-[11px] text-slate-600">
-                        Stored in {entry.id.startsWith("local-") ? "this browser fallback" : "Supabase"}
+                        {entry.creator ? `By ${entry.creator} · ` : ""}Stored in {entry.id.startsWith("local-") ? "this browser fallback" : "Supabase"}
                       </p>
                     </li>
                   ))}

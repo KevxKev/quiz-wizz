@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { OlympusBackground } from "@/components/ui";
 import { buildLeaderboard, getCountdownSeconds, getPhaseProgressPercent } from "@/lib/room";
@@ -110,6 +110,15 @@ function getPlayerPhaseDisplay(args: {
   }
 }
 
+function fmtScore(score: number): string {
+  return Math.round(score).toLocaleString();
+}
+
+function fmtSpeed(ms: number | null | undefined): string {
+  if (ms == null) return "—";
+  return (ms / 1000).toFixed(2) + "s";
+}
+
 function AnswerPageContent() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const searchParams = useSearchParams();
@@ -129,6 +138,28 @@ function AnswerPageContent() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [worthyVote, setWorthyVote] = useState<boolean | null>(null);
   const [isVoting, setIsVoting] = useState(false);
+
+  // Track when the clip answering window opens so we can record answer speed
+  const clipStartedAtMsRef = useRef<number | null>(null);
+  const trackedClipRoundIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!round?.id) {
+      clipStartedAtMsRef.current = null;
+      trackedClipRoundIdRef.current = null;
+      return;
+    }
+    // New round — reset timer
+    if (round.id !== trackedClipRoundIdRef.current) {
+      trackedClipRoundIdRef.current = round.id;
+      clipStartedAtMsRef.current = null;
+    }
+    // Start timer when clip first becomes answerable
+    if ((room?.status === "clip_playing" || room?.status === "playing") && clipStartedAtMsRef.current === null) {
+      clipStartedAtMsRef.current = Date.now();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round?.id, room?.status]);
 
   const logAnswerStep = useCallback((label: string, details?: unknown) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -509,11 +540,13 @@ function AnswerPageContent() {
     });
 
     try {
+      const answeredAfterMs = clipStartedAtMsRef.current !== null ? Date.now() - clipStartedAtMsRef.current : null;
       const { error } = await supabase.from("answers").insert({
         room_id: room.id,
         round_id: round.id,
         player_id: session.playerId,
         answer_text: answerText,
+        answered_after_ms: answeredAfterMs,
       });
 
       if (error) {
@@ -752,20 +785,30 @@ function AnswerPageContent() {
               ) : null}
             </div>
             <ul className="mt-4 space-y-2">
-              {leaderboard.map((entry, index) => (
-                <li
-                  key={entry.roomPlayerId}
-                  className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold"
-                  style={
-                    index === 0
-                      ? { background: "rgba(201,162,39,0.15)", border: "1px solid rgba(201,162,39,0.40)", color: "var(--oly-gold-bright)" }
-                      : { background: "rgba(0,0,0,0.30)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.75)" }
-                  }
-                >
-                  <span>#{index + 1} {entry.nickname}</span>
-                  <span style={{ color: index === 0 ? "var(--oly-gold-bright)" : "rgba(255,255,255,0.55)" }}>{entry.score} pt</span>
-                </li>
-              ))}
+              {leaderboard.map((entry, index) => {
+                const isFinished = room?.status === "finished";
+                const speedVal = isFinished ? entry.avgAnswerMs : entry.lastRoundAnswerMs;
+                return (
+                  <li
+                    key={entry.roomPlayerId}
+                    className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold"
+                    style={
+                      index === 0
+                        ? { background: "rgba(201,162,39,0.15)", border: "1px solid rgba(201,162,39,0.40)", color: "var(--oly-gold-bright)" }
+                        : { background: "rgba(0,0,0,0.30)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.75)" }
+                    }
+                  >
+                    <span>#{index + 1} {entry.nickname}</span>
+                    <span className="flex items-center gap-2">
+                      {speedVal != null ? (
+                        <span style={{ fontSize: "0.7rem", opacity: 0.6 }}>{isFinished ? "avg " : ""}{fmtSpeed(speedVal)}</span>
+                      ) : null}
+                      <span style={{ color: index === 0 ? "var(--oly-gold-bright)" : "rgba(255,255,255,0.55)" }}>{fmtScore(entry.score)} pt</span>
+                    </span>
+                  </li>
+                );
+              })}
+
             </ul>
             {room?.status === "finished" ? (
               <Link

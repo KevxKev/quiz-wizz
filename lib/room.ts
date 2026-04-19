@@ -208,6 +208,26 @@ export function isRoundAnsweringOpen(status?: RoomStatus | null) {
   return status === "clip_playing" || status === "answering";
 }
 
+/**
+ * Compute the score for a correct answer.
+ *
+ * Base: 1 000 pts.
+ * Speed bonus: starts at 500 pts and decreases linearly to 0 over
+ * (totalWindowMs − 2 000 ms). Answers in the last 2 s get base only.
+ *
+ * @param answeredAfterMs  ms elapsed from when clip became answerable to when
+ *                         the player submitted (null → no timing data, 0 pts)
+ * @param totalWindowMs    full answering window: clip duration + answering phase
+ */
+export function computeAnswerScore(answeredAfterMs: number | null | undefined, totalWindowMs: number): number {
+  if (answeredAfterMs == null) return 100; // no timing data — award base only
+  const clamped = Math.max(0, answeredAfterMs);
+  const bonusWindowMs = Math.max(0, totalWindowMs - 2000);
+  if (bonusWindowMs === 0 || clamped >= bonusWindowMs) return 100;
+  const bonus = 50 * (1 - clamped / bonusWindowMs);
+  return Math.round((100 + bonus) * 100) / 100;
+}
+
 export function getRoomStatusLabel(status: RoomStatus) {
   switch (status) {
     case "lobby":
@@ -242,9 +262,13 @@ export function buildLeaderboard(players: RoomPlayer[], rounds: Round[], answers
       score: 0,
       correctCount: 0,
       answeredCount: 0,
+      avgAnswerMs: null,
+      lastRoundAnswerMs: null,
     }));
 
   const entryByPlayerId = new Map(entries.map((entry) => [entry.playerId, entry]));
+  const sumCorrectMsByPlayer = new Map<string, number>();
+  const lastRoundNumberByPlayer = new Map<string, number>();
 
   for (const answer of answers) {
     const entry = entryByPlayerId.get(answer.player_id);
@@ -260,21 +284,39 @@ export function buildLeaderboard(players: RoomPlayer[], rounds: Round[], answers
 
     entry.answeredCount += 1;
 
-    if (round.correct_answer && answer.answer_text === round.correct_answer) {
-      entry.score += 1;
-      entry.correctCount += 1;
+    // Track last-round answer time (for per-round display)
+    const prevLast = lastRoundNumberByPlayer.get(entry.playerId) ?? -1;
+    if (round.round_number > prevLast) {
+      lastRoundNumberByPlayer.set(entry.playerId, round.round_number);
+      entry.lastRoundAnswerMs = answer.answered_after_ms ?? null;
     }
+
+    if (round.correct_answer && answer.answer_text === round.correct_answer) {
+      const clipDurationMs = getClipPlayDurationSeconds(round) * 1000;
+      const totalWindowMs = clipDurationMs + DEFAULT_ANSWERING_DURATION_SECONDS * 1000;
+      const pts = computeAnswerScore(answer.answered_after_ms ?? null, totalWindowMs);
+      entry.score = Math.round((entry.score + pts) * 100) / 100;
+      entry.correctCount += 1;
+
+      if (answer.answered_after_ms != null) {
+        sumCorrectMsByPlayer.set(entry.playerId, (sumCorrectMsByPlayer.get(entry.playerId) ?? 0) + answer.answered_after_ms);
+      }
+    }
+  }
+
+  for (const entry of entries) {
+    const sumMs = sumCorrectMsByPlayer.get(entry.playerId);
+    entry.avgAnswerMs = entry.correctCount > 0 && sumMs != null ? Math.round(sumMs / entry.correctCount) : null;
   }
 
   return entries.sort((left, right) => {
     if (right.score !== left.score) {
       return right.score - left.score;
     }
-
-    if (right.correctCount !== left.correctCount) {
-      return right.correctCount - left.correctCount;
-    }
-
+    // Tiebreaker: faster average correct answer time wins
+    const leftAvg = left.avgAnswerMs ?? Infinity;
+    const rightAvg = right.avgAnswerMs ?? Infinity;
+    if (leftAvg !== rightAvg) return leftAvg - rightAvg;
     return left.nickname.localeCompare(right.nickname);
   });
 }

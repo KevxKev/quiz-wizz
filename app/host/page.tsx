@@ -197,6 +197,15 @@ function getHostPhaseDisplay(args: {
   }
 }
 
+function fmtScore(score: number): string {
+  return Math.round(score).toLocaleString();
+}
+
+function fmtSpeed(ms: number | null | undefined): string {
+  if (ms == null) return "—";
+  return (ms / 1000).toFixed(2) + "s";
+}
+
 export default function HostPage() {
   const playerHandleRef = useRef<TimedYouTubePlayerHandle | null>(null);
   const preparedRoundRef = useRef<string | null>(null);
@@ -204,6 +213,8 @@ export default function HostPage() {
   const shuffledEntryOrderRef = useRef<string[]>([]);
   // Prevents the "early worthy trigger" from firing more than once per round
   const worthyAutoTriggeredRef = useRef(false);
+  const soundtrackRef = useRef<HTMLAudioElement | null>(null);
+  const soundtrackFadeRef = useRef<number | null>(null);
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://192.168.2.15:3001";
 
@@ -1186,6 +1197,85 @@ export default function HostPage() {
   const joinUrl = room ? `${siteUrl}/join?room=${room.code}` : `${siteUrl}/join`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
 
+  // ── Soundtrack: initialise once on mount ──────────────────────────────────
+  useEffect(() => {
+    const audio = new Audio("/dionysos-after-dark.mp3");
+    audio.loop = true;
+    audio.volume = 1.0;
+    soundtrackRef.current = audio;
+
+    const tryPlay = () => {
+      void audio.play().catch(() => {});
+    };
+
+    // Attempt immediate autoplay; browsers may block it
+    tryPlay();
+
+    // Retry on the first user interaction (click, key, or touch)
+    const onInteraction = () => {
+      if (audio.paused) {
+        tryPlay();
+      }
+      window.removeEventListener("click", onInteraction);
+      window.removeEventListener("keydown", onInteraction);
+      window.removeEventListener("touchstart", onInteraction);
+    };
+
+    window.addEventListener("click", onInteraction);
+    window.addEventListener("keydown", onInteraction);
+    window.addEventListener("touchstart", onInteraction);
+
+    return () => {
+      window.removeEventListener("click", onInteraction);
+      window.removeEventListener("keydown", onInteraction);
+      window.removeEventListener("touchstart", onInteraction);
+      audio.pause();
+      audio.src = "";
+      soundtrackRef.current = null;
+    };
+  }, []);
+
+  // ── Soundtrack: fade volume based on game state ───────────────────────────
+  useEffect(() => {
+    const audio = soundtrackRef.current;
+    if (!audio) return;
+
+    // Music plays only during lobby and final leaderboard; silent everywhere else
+    const isLobby = !room || room.status === "lobby";
+    const isFinished = room?.status === "finished";
+    const targetVolume = (isLobby || isFinished) ? 1.0 : 0;
+    const fadeDurationMs = targetVolume === 0 ? 500 : 700;
+    const stepMs = 25;
+    const steps = Math.ceil(fadeDurationMs / stepMs);
+    const startVolume = audio.volume;
+    const delta = (targetVolume - startVolume) / steps;
+
+    if (soundtrackFadeRef.current !== null) {
+      window.clearInterval(soundtrackFadeRef.current);
+      soundtrackFadeRef.current = null;
+    }
+
+    let stepCount = 0;
+    soundtrackFadeRef.current = window.setInterval(() => {
+      stepCount += 1;
+      audio.volume = Math.max(0, Math.min(1, startVolume + delta * stepCount));
+      if (stepCount >= steps) {
+        audio.volume = targetVolume;
+        if (soundtrackFadeRef.current !== null) {
+          window.clearInterval(soundtrackFadeRef.current);
+          soundtrackFadeRef.current = null;
+        }
+      }
+    }, stepMs);
+
+    return () => {
+      if (soundtrackFadeRef.current !== null) {
+        window.clearInterval(soundtrackFadeRef.current);
+        soundtrackFadeRef.current = null;
+      }
+    };
+  }, [room]);
+
   return (
     <main className={`text-slate-50 ${isGameScreen || isFinishedScreen ? "relative h-screen overflow-hidden" : isLobbyScreen ? "h-screen overflow-hidden" : "bg-slate-950 min-h-screen px-4 py-6 sm:px-6 lg:px-8"}`}
       style={isGameScreen || isFinishedScreen ? { background: "var(--oly-night-base)" } : undefined}
@@ -1678,7 +1768,12 @@ export default function HostPage() {
                           }
                         >
                           <span className="font-semibold">#{index + 1} {entry.nickname}</span>
-                          <span className="font-bold" style={{ color: index === 0 ? "var(--oly-gold-bright)" : "rgba(255,255,255,0.50)" }}>{entry.score} pt</span>
+                          <span className="flex items-center gap-3">
+                            {entry.lastRoundAnswerMs != null ? (
+                              <span style={{ fontSize: "0.75rem", opacity: 0.55 }}>{fmtSpeed(entry.lastRoundAnswerMs)}</span>
+                            ) : null}
+                            <span className="font-bold" style={{ color: index === 0 ? "var(--oly-gold-bright)" : "rgba(255,255,255,0.50)" }}>{fmtScore(entry.score)} pt</span>
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -1760,7 +1855,12 @@ export default function HostPage() {
                       }
                     >
                       <span>#{index + 1} {entry.nickname}</span>
-                      <span>{entry.score} pt</span>
+                      <span className="flex items-center gap-3">
+                        {entry.avgAnswerMs != null ? (
+                          <span style={{ fontSize: "0.75rem", opacity: 0.55 }}>avg {fmtSpeed(entry.avgAnswerMs)}</span>
+                        ) : null}
+                        <span>{fmtScore(entry.score)} pt</span>
+                      </span>
                     </li>
                   ))}
                 </ul>
