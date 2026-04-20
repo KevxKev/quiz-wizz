@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   DEFAULT_PLAYER_DEBUG_STATE,
@@ -31,7 +31,7 @@ import type { PlaybackMode, QuizEntry } from "@/types/game";
 
 const DEFAULT_OPTIONS = ["", "", "", ""];
 
-export default function SubmitPage() {
+function SubmitPageInner() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const searchParams = useSearchParams();
   const lastFetchedVideoIdRef = useRef<string | null>(null);
@@ -785,5 +785,13 @@ export default function SubmitPage() {
         </div>
       ) : null}
     </>
+  );
+}
+
+export default function SubmitPage() {
+  return (
+    <Suspense>
+      <SubmitPageInner />
+    </Suspense>
   );
 }
