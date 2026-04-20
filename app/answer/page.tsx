@@ -699,6 +699,7 @@ function AnswerPageContent() {
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {round.answer_options.map((option, index) => {
                   const isCorrectChoice = round.correct_answer === option;
+                  const isWrongChoice = !isCorrectChoice;
 
                   return (
                     <div
@@ -706,8 +707,10 @@ function AnswerPageContent() {
                       className="rounded-2xl px-4 py-3 text-sm font-semibold"
                       style={
                         isCorrectChoice
-                          ? { border: "1px solid rgba(201,162,39,0.7)", background: "rgba(201,162,39,0.15)", color: "var(--oly-gold-bright)" }
-                          : { border: "1px solid rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.25)", color: "rgba(255,255,255,0.45)" }
+                          ? { border: "1px solid rgba(201,162,39,0.7)", background: "rgba(201,162,39,0.18)", color: "var(--oly-gold-bright)" }
+                          : isWrongChoice
+                            ? { border: "1px solid rgba(239,68,68,0.5)", background: "rgba(239,68,68,0.12)", color: "#fca5a5" }
+                            : { border: "1px solid rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.25)", color: "rgba(255,255,255,0.45)" }
                       }
                     >
                       {option}

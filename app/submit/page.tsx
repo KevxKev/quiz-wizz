@@ -1,8 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  DEFAULT_PLAYER_DEBUG_STATE,
+  TimedYouTubePlayer,
+  type PlayerDebugState,
+  type TimedYouTubePlayerHandle,
+} from "@/components/host/TimedYouTubePlayer";
 import { OlympusBackground } from "@/components/ui";
 
 import {
@@ -26,8 +33,10 @@ const DEFAULT_OPTIONS = ["", "", "", ""];
 
 export default function SubmitPage() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const searchParams = useSearchParams();
   const lastFetchedVideoIdRef = useRef<string | null>(null);
-  const [youtubeUrl, setYoutubeUrl] = useState("https://www.youtube.com/watch?v=M7lc1UVf-VE");
+  const editIdLoadedRef = useRef<string | null>(null);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [startTimeInput, setStartTimeInput] = useState("00:00");
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("audio-video");
   const [title, setTitle] = useState("");
@@ -43,6 +52,31 @@ export default function SubmitPage() {
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   const [savedEntries, setSavedEntries] = useState<QuizEntry[]>([]);
   const [editingEntry, setEditingEntry] = useState<QuizEntry | null>(null);
+
+  // Preview modal
+  const [previewEntry, setPreviewEntry] = useState<QuizEntry | null>(null);
+  const [previewPhase, setPreviewPhase] = useState<"playing" | "revealed" | "closed">("closed");
+  const [previewLockedAnswer, setPreviewLockedAnswer] = useState<string | null>(null);
+  const previewPlayerRef = useRef<TimedYouTubePlayerHandle | null>(null);
+  const [, setPreviewDebug] = useState<PlayerDebugState>(DEFAULT_PLAYER_DEBUG_STATE);
+
+  const openPreview = (entry: QuizEntry) => {
+    setPreviewEntry(entry);
+    setPreviewLockedAnswer(null);
+    setPreviewPhase("playing");
+  };
+
+  const closePreview = () => {
+    previewPlayerRef.current?.stopPlayback();
+    setPreviewPhase("closed");
+    setPreviewEntry(null);
+    setPreviewLockedAnswer(null);
+  };
+
+  const handlePreviewAnswer = (option: string) => {
+    if (previewLockedAnswer || previewPhase !== "playing") return;
+    setPreviewLockedAnswer(option);
+  };
 
   const parsedVideoId = useMemo(() => parseYouTubeVideoId(youtubeUrl), [youtubeUrl]);
   const startSeconds = useMemo(() => parseClockInputToSeconds(startTimeInput), [startTimeInput]);
@@ -117,11 +151,8 @@ export default function SubmitPage() {
     void loadSavedEntries();
   }, [loadSavedEntries]);
 
-  const handleOptionChange = (index: number, value: string) => {
-    setAnswerOptions((current) => current.map((option, optionIndex) => (optionIndex === index ? value : option)));
-  };
-
-  const handleEditEntry = (entry: QuizEntry) => {
+  // Auto-load entry when arriving with ?edit=<id> from the entries page
+  const handleEditEntry = useCallback((entry: QuizEntry) => {
     setEditingEntry(entry);
     setYoutubeUrl(`https://www.youtube.com/watch?v=${entry.youtube_video_id}`);
     setStartTimeInput(String(Math.floor((entry.clip_start_seconds ?? 0) / 60)).padStart(2, "0") + ":" + String((entry.clip_start_seconds ?? 0) % 60).padStart(2, "0"));
@@ -138,6 +169,35 @@ export default function SubmitPage() {
     setStatusMessage(`Editing: ${entry.title || entry.prompt_text}`);
     lastFetchedVideoIdRef.current = entry.youtube_video_id;
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+    if (!editId || editIdLoadedRef.current === editId) return;
+
+    const tryLoad = async () => {
+      editIdLoadedRef.current = editId;
+
+      // Try local storage first (works offline / before Supabase loads)
+      const local = readStoredQuizEntries().find((e) => e.id === editId);
+      if (local) { handleEditEntry(local); return; }
+
+      // Fall back to Supabase
+      if (!supabase) return;
+      const { data } = await supabase.from("quiz_entries").select("*").eq("id", editId).maybeSingle();
+      if (!data) return;
+      const entry: QuizEntry = {
+        ...(data as QuizEntry),
+        answer_options: Array.isArray(data.answer_options) ? (data.answer_options as string[]) : [],
+      };
+      handleEditEntry(entry);
+    };
+
+    void tryLoad();
+  }, [searchParams, supabase, handleEditEntry]);
+
+  const handleOptionChange = (index: number, value: string) => {
+    setAnswerOptions((current) => current.map((option, optionIndex) => (optionIndex === index ? value : option)));
   };
 
   const handleCancelEdit = () => {
@@ -149,7 +209,7 @@ export default function SubmitPage() {
     setQuestionText("Which artist performs this clip?");
     setAnswerOptions([...DEFAULT_OPTIONS]);
     setCorrectAnswer("");
-    setYoutubeUrl("https://www.youtube.com/watch?v=M7lc1UVf-VE");
+    setYoutubeUrl("");
     setStartTimeInput("00:00");
     setPlaybackMode("audio-video");
     setStatusMessage("Edit cancelled. Create a new quiz entry here.");
@@ -312,6 +372,7 @@ export default function SubmitPage() {
   };
 
   return (
+    <>
     <main className="relative min-h-screen overflow-hidden bg-[var(--oly-night-base)] px-4 py-10 text-slate-50 sm:px-6">
       <OlympusBackground showParticles />
       <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-6">
@@ -557,6 +618,14 @@ export default function SubmitPage() {
                         <div className="flex shrink-0 flex-col gap-1.5">
                           <button
                             type="button"
+                            onClick={() => openPreview(entry)}
+                            className="rounded-lg px-2 py-1 text-[11px] font-semibold transition"
+                            style={{ border: "1px solid rgba(201,162,39,0.30)", color: "var(--oly-gold-bright)" }}
+                          >
+                            ▶ Preview
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleEditEntry(entry)}
                             disabled={editingEntry?.id === entry.id || deletingEntryId === entry.id}
                             className="rounded-lg px-2 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
@@ -613,5 +682,108 @@ export default function SubmitPage() {
         </div>
       </div>
     </main>
+
+      {/* ── Preview modal ── */}
+      {previewEntry && previewPhase !== "closed" ? (
+        <div
+          className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: "linear-gradient(135deg, #000005 0%, #050312 60%, #0a0520 100%)" }}
+        >
+          <div className="flex flex-none items-center justify-between gap-4 px-5 py-3" style={{ borderBottom: "1px solid rgba(201,162,39,0.15)" }}>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.4em]" style={{ color: "var(--oly-gold-dim)" }}>✦ Test Preview</p>
+              <p className="mt-0.5 text-sm font-bold text-white">{previewEntry.title || previewEntry.prompt_text}</p>
+            </div>
+            <button
+              type="button"
+              onClick={closePreview}
+              className="rounded-2xl px-4 py-2 text-sm font-semibold transition"
+              style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.40)", color: "#fca5a5" }}
+            >
+              ✕ Close
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 xl:flex-row xl:overflow-hidden">
+            <div className="min-h-0 flex-1">
+              <TimedYouTubePlayer
+                ref={previewPlayerRef}
+                videoId={previewEntry.youtube_video_id}
+                startSeconds={previewEntry.clip_start_seconds}
+                endSeconds={previewPhase === "revealed" ? 3600 : previewEntry.clip_end_seconds}
+                playbackMode={previewPhase === "revealed" ? "audio-video" : previewEntry.playback_mode}
+                autoPlayRequestKey={`preview-${previewEntry.id}-${previewPhase}`}
+                spoilerGuard={previewPhase === "playing"}
+                highlighted={previewPhase === "playing"}
+                onVideoEnded={() => setPreviewPhase("revealed")}
+                onDebugChange={setPreviewDebug}
+              />
+            </div>
+            <div className="flex w-full flex-col gap-4 xl:w-80">
+              <div className="rounded-3xl p-5" style={{ background: "rgba(5,3,18,0.80)", border: "1px solid rgba(201,162,39,0.20)" }}>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.35em]" style={{ color: "var(--oly-gold-dim)" }}>
+                  {previewPhase === "playing" ? "Clip playing" : "✦ Revealed"}
+                </p>
+                <h2 className="mt-2 text-xl font-bold text-white">{previewEntry.prompt_text}</h2>
+                <div className="mt-4 grid gap-2">
+                  {previewEntry.answer_options.filter(Boolean).map((option) => {
+                    const isCorrect = previewEntry.correct_answer === option;
+                    const isLocked = previewLockedAnswer === option;
+                    const isRevealed = previewPhase === "revealed";
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => handlePreviewAnswer(option)}
+                        disabled={Boolean(previewLockedAnswer) || isRevealed}
+                        className="rounded-2xl px-4 py-3 text-left text-sm font-semibold transition disabled:cursor-default"
+                        style={
+                          isRevealed && isCorrect
+                            ? { border: "1px solid rgba(201,162,39,0.7)", background: "rgba(201,162,39,0.18)", color: "var(--oly-gold-bright)" }
+                            : isRevealed && !isCorrect
+                              ? { border: "1px solid rgba(239,68,68,0.5)", background: "rgba(239,68,68,0.12)", color: "#fca5a5" }
+                              : isLocked
+                                ? { border: "1px solid rgba(201,162,39,0.45)", background: "rgba(201,162,39,0.10)", color: "var(--oly-gold-bright)" }
+                                : { border: "1px solid rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.35)", color: "white" }
+                        }
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+                {previewPhase === "playing" && !previewLockedAnswer ? (
+                  <p className="mt-3 text-center text-xs text-slate-500">Click an answer to lock it in</p>
+                ) : null}
+                {previewPhase === "playing" && previewLockedAnswer ? (
+                  <p className="mt-3 text-center text-xs" style={{ color: "var(--oly-gold-dim)" }}>Locked: {previewLockedAnswer} — waiting for clip to end…</p>
+                ) : null}
+                {previewPhase === "revealed" ? (
+                  <div className="mt-4 rounded-2xl px-4 py-3 text-center text-sm" style={{ border: "1px solid rgba(201,162,39,0.40)", background: "rgba(201,162,39,0.10)" }}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--oly-gold-dim)" }}>Correct answer</p>
+                    <p className="mt-1 text-lg font-bold" style={{ color: "var(--oly-gold-bright)" }}>{previewEntry.correct_answer}</p>
+                    {previewLockedAnswer ? (
+                      <p className="mt-1 text-xs text-slate-400">
+                        You answered: <span style={{ color: previewLockedAnswer === previewEntry.correct_answer ? "var(--oly-gold-bright)" : "#fca5a5" }}>{previewLockedAnswer}</span>
+                        {previewLockedAnswer === previewEntry.correct_answer ? " ✓ Correct!" : " ✗ Wrong"}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-slate-500">No answer selected</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={closePreview}
+                      className="mt-4 w-full rounded-2xl px-4 py-2.5 text-sm font-bold transition"
+                      style={{ background: "linear-gradient(135deg, var(--oly-gold-dim) 0%, var(--oly-gold-bright) 100%)", color: "#0a0800" }}
+                    >
+                      Close preview
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

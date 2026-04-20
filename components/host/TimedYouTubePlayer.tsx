@@ -284,18 +284,20 @@ export const TimedYouTubePlayer = forwardRef<TimedYouTubePlayerHandle, TimedYouT
     }, []);
 
     const applyPlaybackMode = useCallback(() => {
-      const player = playerRef.current;
+      const player = playerRef.current as (YouTubePlayerInstance & { setVolume?: (vol: number) => void }) | null;
 
       if (!player) {
         return;
       }
 
-      player.unMute();
-
       if (playbackMode === "video-only") {
-        logEvent("Applied video-only round mode with music enabled.");
+        player.mute();
+        logEvent("Applied video-only mode: video visible, audio muted.");
         return;
       }
+
+      player.unMute();
+      player.setVolume?.(100);
 
       if (playbackMode === "audio-only") {
         logEvent("Applied audio-only guessing mode with fully hidden video.");

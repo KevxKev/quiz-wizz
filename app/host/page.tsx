@@ -412,7 +412,7 @@ export default function HostPage() {
       const clipPlaybackMode =
         roomStatus === "worthy_playing"
           ? "audio-video"
-          : roomStatus === "revealed" && basePlaybackMode === "audio-only"
+          : roomStatus === "revealed" && (basePlaybackMode === "audio-only" || basePlaybackMode === "video-only")
           ? "audio-video"
           : basePlaybackMode;
 
@@ -838,19 +838,7 @@ export default function HostPage() {
             getPhaseDurationSeconds("clip_playing", currentRound),
           );
           setRoomStatus(`Round ${currentRound?.round_number ?? room.current_round_number}: the clip is playing and answers are live.`);
-        } else if (room.status === "clip_playing") {
-          if (allPlayersAnswered) {
-            await updatePhase(
-              "revealed",
-              "revealed",
-              DEFAULT_REVEAL_DURATION_SECONDS + DEFAULT_REPLAY_DURATION_SECONDS,
-            );
-            setRoomStatus(`Everyone answered. Revealing the correct answer now.`);
-          } else {
-            await updatePhase("answering", "answering", DEFAULT_ANSWERING_DURATION_SECONDS);
-            setRoomStatus(`Clip finished. Final answer window is open.`);
-          }
-        } else if (room.status === "answering") {
+        } else if (room.status === "clip_playing" || room.status === "answering") {
           await updatePhase(
             "revealed",
             "revealed",
@@ -1201,14 +1189,22 @@ export default function HostPage() {
   useEffect(() => {
     const audio = new Audio("/dionysos-after-dark.mp3");
     audio.loop = true;
-    audio.volume = 1.0;
+    audio.volume = 0.5;
     soundtrackRef.current = audio;
 
     const tryPlay = () => {
       void audio.play().catch(() => {});
     };
 
-    // Attempt immediate autoplay; browsers may block it
+    // Jump to a random position once duration is known, then play
+    const onMetadata = () => {
+      if (audio.duration && Number.isFinite(audio.duration)) {
+        audio.currentTime = Math.random() * audio.duration;
+      }
+      tryPlay();
+    };
+    audio.addEventListener("loadedmetadata", onMetadata, { once: true });
+    // Fallback: attempt immediate autoplay in case metadata already loaded
     tryPlay();
 
     // Retry on the first user interaction (click, key, or touch)
@@ -1229,6 +1225,7 @@ export default function HostPage() {
       window.removeEventListener("click", onInteraction);
       window.removeEventListener("keydown", onInteraction);
       window.removeEventListener("touchstart", onInteraction);
+      audio.removeEventListener("loadedmetadata", onMetadata);
       audio.pause();
       audio.src = "";
       soundtrackRef.current = null;
@@ -1243,7 +1240,7 @@ export default function HostPage() {
     // Music plays only during lobby and final leaderboard; silent everywhere else
     const isLobby = !room || room.status === "lobby";
     const isFinished = room?.status === "finished";
-    const targetVolume = (isLobby || isFinished) ? 1.0 : 0;
+    const targetVolume = (isLobby || isFinished) ? 0.5 : 0;
     const fadeDurationMs = targetVolume === 0 ? 500 : 700;
     const stepMs = 25;
     const steps = Math.ceil(fadeDurationMs / stepMs);
@@ -1683,14 +1680,43 @@ export default function HostPage() {
                 <div className="text-center">
                   <p className="text-xs font-semibold uppercase tracking-[0.28em]" style={{ color: "var(--oly-gold-dim)" }}>{phaseDisplay.badge} · Vote now on your phone</p>
                   <h1 className="mt-1 text-2xl font-black text-white">Is this song worthy of the gods?</h1>
-                  <p className="mt-1 text-xs text-slate-400">
-                    {worthyVotesSubmitted}/{players.length} voted · {worthyVoteCount} say worthy
-                    {players.length > 0 ? ` (${Math.round((worthyVoteCount / players.length) * 100)}%)` : ""}
-                  </p>
+                  {(() => {
+                    const nonHostCount = players.filter((p) => !p.is_host).length;
+                    const votePercent = nonHostCount > 0 ? (worthyVoteCount / nonHostCount) * 100 : 0;
+                    const barGlow = votePercent >= 49
+                      ? "0 0 12px rgba(201,162,39,0.80), 0 0 24px rgba(201,162,39,0.40)"
+                      : votePercent >= 25
+                        ? "0 0 8px rgba(201,162,39,0.50)"
+                        : "none";
+                    return (
+                      <>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {worthyVotesSubmitted}/{nonHostCount} voted · {worthyVoteCount} say worthy
+                          {nonHostCount > 0 ? ` (${Math.round(votePercent)}%)` : ""}
+                        </p>
+                        <div className="mx-auto mt-3 max-w-3xl">
+                          <div className="mt-1 h-4 overflow-hidden rounded-full bg-black/50" style={{ border: "1px solid rgba(201,162,39,0.20)" }}>
+                            <div
+                              className="h-full rounded-full transition-[width] duration-300"
+                              style={{
+                                width: `${votePercent}%`,
+                                background: "linear-gradient(90deg, rgba(201,162,39,0.60), var(--oly-gold-bright))",
+                                boxShadow: barGlow,
+                              }}
+                            />
+                          </div>
+                          <div className="mt-1 flex items-center justify-between text-xs" style={{ color: "var(--oly-gold-dim)" }}>
+                            <span>0%</span>
+                            <span className="font-semibold" style={{ color: votePercent >= 49 ? "var(--oly-gold-bright)" : "var(--oly-gold-dim)" }}>
+                              {Math.round(votePercent)}% — {votePercent >= 49 ? "✦ WORTHY!" : "threshold: 50%"}
+                            </span>
+                            <span>100%</span>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                   <div className="mx-auto mt-2 max-w-3xl">
-                    <div className="mt-1 h-2 overflow-hidden rounded-full bg-black/50">
-                      <div className="h-full rounded-full transition-[width] duration-300" style={{ width: `${players.length > 0 ? (worthyVoteCount / players.length) * 100 : 0}%`, background: "linear-gradient(90deg, var(--oly-gold-dim), var(--oly-gold-bright))" }} />
-                    </div>
                     <div className="mt-1 flex items-center justify-between text-xs" style={{ color: "var(--oly-gold-dim)" }}>
                       <span>{phaseDisplay.badge}</span>
                       <span>{countdownSeconds !== null ? `${countdownSeconds}s` : ""}</span>
@@ -1703,8 +1729,12 @@ export default function HostPage() {
               ) : (
                 <div className="text-center">
                   <p className="text-xs font-semibold uppercase tracking-[0.28em]" style={{ color: "var(--oly-gold-dim)" }}>{phaseDisplay.badge}</p>
-                  <h1 className="mt-2 text-3xl font-black text-white sm:text-4xl">{phaseDisplay.title}</h1>
-                  <p className="mt-2 text-sm text-slate-400 sm:text-base">{phaseDisplay.subtitle}</p>
+                  {(room?.status === "clip_playing" || room?.status === "answering") && currentRound?.prompt_text ? (
+                    <h1 className="mt-1 text-3xl font-black text-white sm:text-4xl">{currentRound.prompt_text}</h1>
+                  ) : (
+                    <h1 className="mt-2 text-3xl font-black text-white sm:text-4xl">{phaseDisplay.title}</h1>
+                  )}
+
                 </div>
               )}
               {room?.status !== "revealed" ? (
@@ -1723,7 +1753,7 @@ export default function HostPage() {
             <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
               <div className="relative min-h-0">
                 <TimedYouTubePlayer
-                  key={playerRenderKey}
+                  key="game-player"
                   ref={playerHandleRef}
                   videoId={parsedVideoId}
                   startSeconds={startSeconds ?? 0}
@@ -1786,9 +1816,8 @@ export default function HostPage() {
                     <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: "var(--oly-gold-dim)" }}>
                       {room ? getRoomStatusLabel(room.status) : "Waiting"} · Progress {totalRoundsLabel}
                     </p>
-                    <h2 className="mt-3 text-2xl font-bold text-white">{currentRound.prompt_text}</h2>
 
-                    <div className="mt-5 grid gap-3">
+                    <div className="mt-4 grid gap-3">
                       {currentRound.answer_options.map((option, index) => {
                         const isCorrectChoice =
                           (room?.status === "revealed" || room?.status === "leaderboard") && currentRound.correct_answer === option;
