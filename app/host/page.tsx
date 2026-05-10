@@ -903,11 +903,11 @@ export default function HostPage() {
 
           {room ? (
             <>
-              <Panel glow style={{ padding: "14px 40px", textAlign: "center", position: "relative", width: "100%" }}>
+              <Panel glow style={{ padding: "14px 20px", textAlign: "center", position: "relative", width: "100%" }}>
                 <Meander side="top" />
                 <Meander side="bottom" />
                 <p style={{ color: `${TX}33`, fontSize: 10, letterSpacing: ".3em", marginBottom: 4 }}>ROOM CODE</p>
-                <div className="gold-shimmer" style={{ fontFamily: "Cinzel,serif", fontSize: 88, fontWeight: 900, letterSpacing: ".2em", lineHeight: 1 }}>
+                <div className="gold-shimmer" style={{ fontFamily: "Cinzel,serif", fontSize: 72, fontWeight: 900, letterSpacing: ".15em", lineHeight: 1 }}>
                   {room.code}
                 </div>
               </Panel>
@@ -959,7 +959,7 @@ export default function HostPage() {
             ))}
 
             {/* Empty slot placeholders */}
-            {Array.from({ length: Math.max(0, 4 - players.length) }).map((_, i) => (
+            {Array.from({ length: Math.max(0, 8 - players.length) }).map((_, i) => (
               <div key={`empty-${i}`} style={{
                 padding: "14px 16px",
                 borderRadius: 12,
