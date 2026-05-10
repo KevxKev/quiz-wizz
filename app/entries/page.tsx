@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Btn, G, Meander, ModeBadge, Panel, TX, YoutubeMock } from "@/components/olympus";
+import { Btn, G, Meander, ModeBadge, Panel, TX } from "@/components/olympus";
+import { TimedYouTubePlayer } from "@/components/host/TimedYouTubePlayer";
+import type { TimedYouTubePlayerHandle } from "@/components/host/TimedYouTubePlayer";
 import { mergeQuizEntries, readStoredQuizEntries, removeStoredQuizEntry } from "@/lib/room";
 import { formatSupabaseErrorMessage, getSupabaseBrowserClient, getSupabaseSetupMessage } from "@/lib/supabase";
 import type { QuizEntry } from "@/types/game";
@@ -12,6 +14,7 @@ type EntryRow = QuizEntry;
 
 export default function EntriesPage() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const previewPlayerRef = useRef<TimedYouTubePlayerHandle>(null);
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("Loading vault...");
@@ -235,30 +238,69 @@ export default function EntriesPage() {
           onClick={() => setPreview(null)}
         >
           <div onClick={(e) => e.stopPropagation()}>
-            <Panel style={{ padding: 28, maxWidth: 640, width: "90%" }}>
+            <Panel style={{ padding: 28, maxWidth: 640, width: "90%", position: "relative" }}>
               <Meander side="top" />
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <div>
-                  <h2 style={{ fontFamily: "Cinzel,serif", fontSize: 22, color: TX, margin: 0 }}>{preview.title}</h2>
-                  <p style={{ color: `${TX}55`, fontSize: 13, margin: "4px 0 0" }}>{preview.artist}</p>
+              <div style={{ marginBottom: 16 }}>
+                <p style={{
+                  fontFamily: "Cinzel,serif",
+                  fontSize: 16,
+                  color: `${TX}bb`,
+                  letterSpacing: ".1em",
+                  textAlign: "center",
+                  margin: "0 0 16px",
+                }}>
+                  {preview.prompt_text}
+                </p>
+                <div style={{ width: "100%", height: 240 }}>
+                  <TimedYouTubePlayer
+                    ref={previewPlayerRef}
+                    videoId={preview.youtube_video_id}
+                    startSeconds={preview.clip_start_seconds}
+                    endSeconds={preview.clip_end_seconds}
+                    playbackMode={preview.playback_mode as "audio-only" | "video-only" | "audio-video"}
+                    autoPlayRequestKey={preview.id}
+                    onVideoEnded={() => setPreview(null)}
+                    naked
+                  />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setPreview(null)}
-                  style={{
-                    background: "none",
-                    border: `1px solid ${G}33`,
-                    borderRadius: 6,
-                    color: `${TX}55`,
-                    fontSize: 14,
-                    padding: "6px 14px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Close
-                </button>
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => previewPlayerRef.current?.playClip()}
+                    style={{
+                      flex: 1,
+                      padding: "10px",
+                      borderRadius: 8,
+                      background: `${G}22`,
+                      border: `1.5px solid ${G}55`,
+                      color: G,
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ▶ Play Clip
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreview(null)}
+                    style={{
+                      padding: "10px 20px",
+                      borderRadius: 8,
+                      background: "none",
+                      border: `1px solid ${G}33`,
+                      color: `${TX}55`,
+                      fontSize: 13,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+                <p style={{ color: `${TX}33`, fontSize: 11, textAlign: "center", marginTop: 8 }}>
+                  {preview.title} – {preview.artist}
+                </p>
               </div>
-              <YoutubeMock mode={preview.playback_mode} w="100%" h={300} />
             </Panel>
           </div>
         </div>

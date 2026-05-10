@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import type { TimedYouTubePlayerHandle } from "@/components/host/TimedYouTubePlayer";
 
 import { Btn, G, ModeBadge, Panel, TX } from "@/components/olympus";
 import { TimedYouTubePlayer } from "@/components/host/TimedYouTubePlayer";
@@ -18,6 +21,18 @@ import {
 } from "@/lib/supabase";
 import type { QuizEntry } from "@/types/game";
 
+function parseMMSS(input: string): number {
+  const clean = input.trim();
+  const parts = clean.split(":");
+  if (parts.length === 2) {
+    const m = parseInt(parts[0] ?? "0", 10);
+    const s = parseInt(parts[1] ?? "0", 10);
+    return Math.max(0, (isNaN(m) ? 0 : m) * 60 + (isNaN(s) ? 0 : s));
+  }
+  const n = parseInt(clean, 10);
+  return isNaN(n) ? 0 : Math.max(0, n);
+}
+
 function parseVideoId(input: string) {
   const trimmed = input.trim();
   if (!trimmed) return "";
@@ -29,16 +44,17 @@ function parseVideoId(input: string) {
 }
 
 export default function SubmitPage() {
+  const router = useRouter();
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const playerRef = useRef<TimedYouTubePlayerHandle>(null);
 
   const [mode, setMode] = useState("audio-only");
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [creator, setCreator] = useState("");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState("Music");
   const [videoInput, setVideoInput] = useState("");
-  const [startSeconds, setStartSeconds] = useState(0);
-  const [endSeconds, setEndSeconds] = useState(15);
+  const [startTimeStr, setStartTimeStr] = useState("0:00");
   const [promptText, setPromptText] = useState("Which song is currently playing?");
   const [options, setOptions] = useState(["", "", "", ""]);
   const [correct, setCorrect] = useState("A");
@@ -46,7 +62,31 @@ export default function SubmitPage() {
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(false);
 
+  const startSeconds = parseMMSS(startTimeStr);
+  const endSeconds = startSeconds + 15;
   const videoId = parseVideoId(videoInput);
+
+  // Auto-fill title and artist from YouTube oEmbed when a valid video ID is detected
+  useEffect(() => {
+    if (!videoId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+        );
+        if (!res.ok || cancelled) return;
+        const data = await res.json() as { title?: string; author_name?: string };
+        if (cancelled) return;
+        if (data.title && !title.trim()) setTitle(data.title);
+        if (data.author_name && !artist.trim()) setArtist(data.author_name);
+      } catch {
+        // silently ignore — user can fill manually
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoId]);
 
   const setOptionAt = (idx: number, value: string) => {
     setOptions((prev) => {
@@ -61,8 +101,7 @@ export default function SubmitPage() {
     title.trim().length > 0 &&
     artist.trim().length > 0 &&
     promptText.trim().length > 0 &&
-    options.every((o) => o.trim().length > 0) &&
-    endSeconds > startSeconds;
+    options.every((o) => o.trim().length > 0);
 
   const saveEntry = async () => {
     if (!supabase) {
@@ -110,8 +149,7 @@ export default function SubmitPage() {
       setArtist("");
       setCategory("");
       setVideoInput("");
-      setStartSeconds(0);
-      setEndSeconds(15);
+      setStartTimeStr("0:00");
     } catch (error) {
       const localFallback = createLocalQuizEntry({
         title: title.trim() || null,
@@ -126,7 +164,7 @@ export default function SubmitPage() {
         answer_options: options.map((o) => o.trim()),
         correct_answer: correct,
         is_active: true,
-      });
+      } as Parameters<typeof createLocalQuizEntry>[0]);
       upsertStoredQuizEntry(localFallback);
       const mergedCount = mergeQuizEntries(readStoredQuizEntries()).length;
       setStatus(`${formatSupabaseErrorMessage(error, "Could not save entry.")} Saved locally instead. Vault local count: ${mergedCount}.`);
@@ -174,26 +212,43 @@ export default function SubmitPage() {
         }
       `}</style>
       <div style={{ marginBottom: 28 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            style={{
+              background: "none",
+              border: `1px solid ${G}33`,
+              borderRadius: 6,
+              color: `${TX}55`,
+              fontSize: 12,
+              padding: "6px 14px",
+              letterSpacing: ".08em",
+              cursor: "pointer",
+            }}
+          >
+            {'<- Back'}
+          </button>
           <Link href="/entries" style={{ textDecoration: "none" }}>
             <span
               style={{
-                background: "none",
-                border: `1px solid ${G}33`,
+                background: "rgba(100,60,200,.15)",
+                border: "1px solid rgba(140,90,255,.3)",
                 borderRadius: 6,
-                color: `${TX}55`,
+                color: "#C8A0FF",
                 fontSize: 12,
-                padding: "4px 12px",
+                padding: "6px 14px",
                 letterSpacing: ".08em",
+                cursor: "pointer",
               }}
             >
-              {'<- Back'}
+              Access Vault
             </span>
           </Link>
-          <h1 style={{ fontFamily: "Cinzel,serif", fontSize: 32, fontWeight: 900, color: TX, letterSpacing: ".08em", margin: 0 }}>
-            Add Quiz Entry
-          </h1>
         </div>
+        <h1 style={{ fontFamily: "Cinzel,serif", fontSize: 32, fontWeight: 900, color: TX, letterSpacing: ".08em", margin: "0 0 4px" }}>
+          Add Quiz Entry
+        </h1>
         <p style={{ color: `${TX}44`, fontSize: 14 }}>Create a new timed music clip for the quiz vault.</p>
       </div>
 
@@ -209,26 +264,47 @@ export default function SubmitPage() {
               </Btn>
             </div>
             {preview && videoId && (
-              <div style={{ width: "100%", height: 220, marginTop: 8 }}>
-                <TimedYouTubePlayer
-                  videoId={videoId}
-                  startSeconds={startSeconds}
-                  endSeconds={endSeconds}
-                  playbackMode={mode as "audio-only" | "video-only" | "audio-video"}
-                  naked
-                />
+              <div style={{ width: "100%", marginTop: 8 }}>
+                <div style={{ width: "100%", height: 220 }}>
+                  <TimedYouTubePlayer
+                    ref={playerRef}
+                    videoId={videoId}
+                    startSeconds={startSeconds}
+                    endSeconds={endSeconds}
+                    playbackMode={mode as "audio-only" | "video-only" | "audio-video"}
+                    naked
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => playerRef.current?.playClip()}
+                  style={{
+                    marginTop: 8,
+                    width: "100%",
+                    padding: "10px",
+                    borderRadius: 8,
+                    background: `${G}22`,
+                    border: `1.5px solid ${G}55`,
+                    color: G,
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    letterSpacing: ".08em",
+                  }}
+                >
+                  ▶ Play Clip
+                </button>
               </div>
             )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
-              <div>
-                <label style={labelStyle}>CLIP START (SECONDS)</label>
-                <input type="number" style={inputStyle} value={startSeconds} onChange={(e) => setStartSeconds(Number(e.target.value || 0))} />
-              </div>
-              <div>
-                <label style={labelStyle}>CLIP END (SECONDS)</label>
-                <input type="number" style={inputStyle} value={endSeconds} onChange={(e) => setEndSeconds(Number(e.target.value || 0))} />
-              </div>
+            <div style={{ marginTop: 12 }}>
+              <label style={labelStyle}>CLIP START TIME (MM:SS)</label>
+              <input
+                style={inputStyle}
+                value={startTimeStr}
+                onChange={(e) => setStartTimeStr(e.target.value)}
+                placeholder="0:00"
+              />
             </div>
           </Panel>
 
@@ -277,11 +353,11 @@ export default function SubmitPage() {
                 <input style={inputStyle} value={artist} onChange={(e) => setArtist(e.target.value)} />
               </div>
               <div>
-                <label style={labelStyle}>CATEGORY (OPTIONAL)</label>
+                <label style={labelStyle}>CATEGORY</label>
                 <input style={inputStyle} value={category} onChange={(e) => setCategory(e.target.value)} />
               </div>
               <div>
-                <label style={labelStyle}>CREATOR (OPTIONAL)</label>
+                <label style={labelStyle}>CREATOR</label>
                 <input style={inputStyle} value={creator} onChange={(e) => setCreator(e.target.value)} />
               </div>
               <div>
