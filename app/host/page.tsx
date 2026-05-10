@@ -863,7 +863,8 @@ export default function HostPage() {
 
   const configuredSiteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim().replace(/\/$/, "");
   const runtimeOrigin = typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
-  const siteUrl = configuredSiteUrl || runtimeOrigin || "http://localhost:3002";
+  // Prefer the actual browser origin (always accurate) over the env var which may point to an old deployment
+  const siteUrl = runtimeOrigin || configuredSiteUrl || "http://localhost:3002";
   const joinPageUrl = `${siteUrl}/join`;
   const qrTarget = room ? `${joinPageUrl}?room=${room.code}` : joinPageUrl;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrTarget)}`;
@@ -912,13 +913,19 @@ export default function HostPage() {
                 </div>
               </Panel>
 
-              <Panel style={{ padding: "12px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                <div style={{ width: 150, height: 150, background: "white", borderRadius: 8, overflow: "hidden" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <div style={{
+                  background: "white",
+                  borderRadius: 20,
+                  padding: 10,
+                  boxShadow: `0 0 0 1.5px ${G}44, 0 8px 32px rgba(0,0,0,.5)`,
+                  lineHeight: 0,
+                }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={qrCodeUrl} alt={`QR code for room ${room.code}`} style={{ width: "100%", height: "100%" }} />
+                  <img src={qrCodeUrl} alt={`QR code for room ${room.code}`} style={{ width: 150, height: 150, borderRadius: 12, display: "block" }} />
                 </div>
-                <p style={{ color: `${TX}44`, fontSize: 10, letterSpacing: ".15em" }}>SCAN TO JOIN</p>
-              </Panel>
+                <p style={{ color: `${TX}44`, fontSize: 10, letterSpacing: ".2em" }}>SCAN TO JOIN</p>
+              </div>
             </>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
