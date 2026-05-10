@@ -21,7 +21,7 @@ function JoinPageInner() {
 
   const [roomCode, setRoomCode] = useState(prefilledRoomCode);
   const [nickname, setNickname] = useState("");
-  const [status, setStatus] = useState("Enter room code and your name.");
+  const [status, setStatus] = useState("");
   const [isJoining, setIsJoining] = useState(false);
 
   const handleJoin = async () => {
@@ -229,6 +229,7 @@ function JoinPageInner() {
             {isJoining ? "Joining..." : "Enter Olympus ->"}
           </Btn>
 
+          {status && (
           <div
             style={{
               width: "100%",
@@ -243,6 +244,7 @@ function JoinPageInner() {
           >
             {status}
           </div>
+          )}
         </div>
       </div>
     </main>

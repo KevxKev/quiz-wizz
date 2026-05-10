@@ -78,8 +78,16 @@ export default function EntriesPage() {
   };
 
   return (
-    <main style={{ minHeight: "100vh", padding: "28px 40px", position: "relative", zIndex: 2 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+    <main className="entries-main" style={{ minHeight: "100vh", padding: "28px 40px", position: "relative", zIndex: 2 }}>
+      <style>{`
+        @media (max-width: 640px) {
+          .entries-main { padding: 20px 16px !important; }
+          .entries-header { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
+          .entries-toolbar { flex-wrap: wrap !important; }
+          .entries-search-input { width: 100% !important; }
+        }
+      `}</style>
+      <div className="entries-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
         <div>
           <h1 style={{ fontFamily: "Cinzel,serif", fontSize: 32, fontWeight: 900, color: TX, letterSpacing: ".08em", margin: 0 }}>
             Entry Vault
@@ -96,7 +104,7 @@ export default function EntriesPage() {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center" }}>
+      <div className="entries-toolbar" style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center" }}>
         <input
           style={{
             padding: "9px 14px",
@@ -109,6 +117,7 @@ export default function EntriesPage() {
             outline: "none",
             width: 280,
           }}
+          className="entries-search-input"
           placeholder="Search songs or artists..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}

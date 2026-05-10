@@ -5,6 +5,7 @@ import { Columns, G, Laurel, StarField, TX } from "@/components/olympus";
 export default function HomePage() {
   return (
     <main
+      className="home-main"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -25,12 +26,17 @@ export default function HomePage() {
           50%     { box-shadow: 0 0 0 2px #E8C55A, 0 0 36px 8px #E8C55Aee, 0 0 90px 20px #E8C55A88, 0 0 160px 36px #E8C55A44; }
         }
         .tv-tile-glow { animation: tv-glow-pulse 2.2s ease-in-out infinite; }
+        @media (max-width: 640px) {
+          .home-main { padding: 56px 16px 40px !important; gap: 28px !important; }
+          .home-title { font-size: 42px !important; }
+          .home-tiles { flex-direction: column !important; gap: 12px !important; }
+        }
       `}</style>
 
       <div style={{ textAlign: "center", position: "relative", zIndex: 2 }}>
         <Laurel size={60}>
           <h1
-            className="gold-shimmer flicker"
+            className="gold-shimmer flicker home-title"
             style={{
               fontFamily: "Cinzel,serif",
               fontSize: 88,
@@ -56,7 +62,7 @@ export default function HomePage() {
         </p>
       </div>
 
-      <div style={{ display: "flex", gap: 22, maxWidth: 1160, width: "100%", position: "relative", zIndex: 2, overflow: "visible" }}>
+      <div className="home-tiles" style={{ display: "flex", gap: 22, maxWidth: 1160, width: "100%", position: "relative", zIndex: 2, overflow: "visible" }}>
         <Link
           href="/host"
           className="tv-tile-glow"
@@ -197,7 +203,7 @@ export default function HomePage() {
               letterSpacing: ".08em",
             }}
           >
-            OPEN VAULT -&gt;
+            ADD ENTRY -&gt;
           </div>
         </Link>
       </div>

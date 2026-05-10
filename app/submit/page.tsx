@@ -166,7 +166,13 @@ export default function SubmitPage() {
   };
 
   return (
-    <main style={{ minHeight: "100vh", padding: "32px 40px", maxWidth: 960, margin: "0 auto" }}>
+    <main className="submit-main" style={{ minHeight: "100vh", padding: "32px 40px", maxWidth: 960, margin: "0 auto" }}>
+      <style>{`
+        @media (max-width: 640px) {
+          .submit-main { padding: 20px 16px !important; }
+          .submit-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
           <Link href="/entries" style={{ textDecoration: "none" }}>
@@ -191,7 +197,7 @@ export default function SubmitPage() {
         <p style={{ color: `${TX}44`, fontSize: 14 }}>Create a new timed music clip for the quiz vault.</p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+      <div className="submit-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <Panel style={{ padding: "22px" }}>
             <div style={sectionHead}>VIDEO SOURCE</div>
