@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import type { TimedYouTubePlayerHandle } from "@/components/host/TimedYouTubePlayer";
 
@@ -43,8 +43,25 @@ function parseVideoId(input: string) {
   return m2?.[1] ?? trimmed;
 }
 
+function toMMSS(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export default function SubmitPage() {
+  return (
+    <Suspense fallback={<main style={{ minHeight: "100vh", padding: "32px" }} />}>
+      <SubmitPageInner />
+    </Suspense>
+  );
+}
+
+function SubmitPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
+  const isEditing = !!editId;
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const playerRef = useRef<TimedYouTubePlayerHandle>(null);
 
@@ -65,6 +82,39 @@ export default function SubmitPage() {
   const startSeconds = parseMMSS(startTimeStr);
   const endSeconds = startSeconds + 15;
   const videoId = parseVideoId(videoInput);
+
+  // Load existing entry when in edit mode
+  useEffect(() => {
+    if (!editId) return;
+    let cancelled = false;
+    void (async () => {
+      // Try Supabase first, fall back to local storage
+      let entry: QuizEntry | null = null;
+      if (supabase) {
+        try {
+          const { data } = await supabase.from("quiz_entries").select("*").eq("id", editId).single();
+          if (data && !cancelled) entry = data as QuizEntry;
+        } catch { /* fall through to local */ }
+      }
+      if (!entry) {
+        entry = readStoredQuizEntries().find((e) => e.id === editId) ?? null;
+      }
+      if (!entry || cancelled) return;
+      setTitle(entry.title ?? "");
+      setArtist(entry.artist ?? "");
+      setCategory(entry.category ?? "Music");
+      setCreator(entry.creator ?? "");
+      setVideoInput(entry.youtube_video_id ?? "");
+      setStartTimeStr(toMMSS(entry.clip_start_seconds ?? 0));
+      setMode(entry.playback_mode ?? "audio-only");
+      setPromptText(entry.prompt_text ?? "Which song is currently playing?");
+      setOptions(Array.isArray(entry.answer_options) && entry.answer_options.length === 4 ? entry.answer_options : ["", "", "", ""]);
+      setCorrect(entry.correct_answer ?? "A");
+      setStatus("Editing existing entry.");
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
 
   // Auto-fill title and artist from YouTube oEmbed when a valid video ID is detected
   useEffect(() => {
@@ -133,7 +183,9 @@ export default function SubmitPage() {
         is_active: true,
       };
 
-      const { data, error } = await supabase.from("quiz_entries").insert(payload).select("*").single();
+      const { data, error } = isEditing && editId
+        ? await supabase.from("quiz_entries").update(payload).eq("id", editId).select("*").single()
+        : await supabase.from("quiz_entries").insert(payload).select("*").single();
       if (error) throw error;
 
       if (data) {
@@ -143,13 +195,15 @@ export default function SubmitPage() {
         });
       }
 
-      setStatus("Saved to vault.");
-      setOptions(["", "", "", ""]);
-      setTitle("");
-      setArtist("");
-      setCategory("");
-      setVideoInput("");
-      setStartTimeStr("0:00");
+      setStatus(isEditing ? "Entry updated." : "Saved to vault.");
+      if (!isEditing) {
+        setOptions(["", "", "", ""]);
+        setTitle("");
+        setArtist("");
+        setCategory("Music");
+        setVideoInput("");
+        setStartTimeStr("0:00");
+      }
     } catch (error) {
       const localFallback = createLocalQuizEntry({
         title: title.trim() || null,
@@ -247,9 +301,9 @@ export default function SubmitPage() {
           </Link>
         </div>
         <h1 style={{ fontFamily: "Cinzel,serif", fontSize: 32, fontWeight: 900, color: TX, letterSpacing: ".08em", margin: "0 0 4px" }}>
-          Add Quiz Entry
+          {isEditing ? "Edit Quiz Entry" : "Add Quiz Entry"}
         </h1>
-        <p style={{ color: `${TX}44`, fontSize: 14 }}>Create a new timed music clip for the quiz vault.</p>
+        <p style={{ color: `${TX}44`, fontSize: 14 }}>{isEditing ? "Update the entry details below." : "Create a new timed music clip for the quiz vault."}</p>
       </div>
 
       <div className="submit-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
@@ -408,7 +462,7 @@ export default function SubmitPage() {
               <Btn variant="dark" size="sm">Cancel</Btn>
             </Link>
             <Btn onClick={() => void saveEntry()} size="md" disabled={saving || !canSave}>
-              {saving ? "Saving..." : "Save Entry"}
+              {saving ? (isEditing ? "Updating..." : "Saving...") : (isEditing ? "Update Entry" : "Save Entry")}
             </Btn>
           </div>
           <p style={{ color: `${TX}aa`, fontSize: 13, textAlign: "right" }}>{status}</p>

@@ -193,7 +193,7 @@ export default function EntriesPage() {
               <Btn onClick={() => setPreview(e)} variant="ghost" size="sm" style={{ flex: 1, textAlign: "center", padding: "6px 0" }}>
                 Preview
               </Btn>
-              <Link href="/submit" style={{ textDecoration: "none", flex: 1 }}>
+              <Link href={`/submit?edit=${e.id}`} style={{ textDecoration: "none", flex: 1 }}>
                 <Btn variant="dark" size="sm" style={{ width: "100%", textAlign: "center", padding: "6px 0" }}>Edit</Btn>
               </Link>
               <button
