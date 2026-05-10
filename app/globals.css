@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+/* ── Prototype-exact global animations ──────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+@keyframes pulse-glow {
+  0%,  100% { box-shadow: 0 0 20px rgba(201, 151, 58, 0.25); }
+  50%       { box-shadow: 0 0 50px rgba(201, 151, 58, 0.65), 0 0 100px rgba(201, 151, 58, 0.18); }
+}
+
+@keyframes flicker {
+  0%,  100% { opacity: 1;    }
+  91%        { opacity: 0.95; }
+  92%        { opacity: 0.55; }
+  93%        { opacity: 1;    }
+  97%        { opacity: 0.9;  }
+  98%        { opacity: 1;    }
+}
+
+/* Exact classes used in on-tv.jsx prototype */
+.gold-shimmer {
+  background: linear-gradient(90deg, #7b5000, #e8c55a, #c9973a, #ffe07a, #c9973a, #8b6100);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 4s linear infinite;
+}
+
+.flicker {
+  animation: flicker 9s ease-in-out infinite;
+}
+
+:root {
+  --oly-gold-dim: #7b5000;
+  --oly-gold: #c9973a;
+  --oly-gold-bright: #e8c55a;
+  --oly-night-base: #07051a;
+  --oly-night-mid: #0d0a28;
+  --oly-text: #f0eaff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-plus-jakarta), sans-serif;
+  color: var(--oly-text);
+  background:
+    radial-gradient(ellipse at 20% 15%, rgba(95, 58, 180, 0.22), transparent 45%),
+    radial-gradient(ellipse at 80% 70%, rgba(36, 120, 200, 0.13), transparent 42%),
+    linear-gradient(160deg, #060414 0%, #090622 35%, #050313 100%);
+}
+
+.oly-gold-title {
+  background: linear-gradient(90deg, #7b5000 0%, #e8c55a 50%, #ffe07a 65%, #c9973a 100%);
+  background-size: 240% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: oly-shimmer 4.8s linear infinite;
+}
+
+@keyframes oly-shimmer {
+  0% {
+    background-position: -220% center;
+  }
+  100% {
+    background-position: 220% center;
+  }
+}
+
+@keyframes oly-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 0.92;
+  }
+  93% {
+    opacity: 0.66;
+  }
+  94% {
+    opacity: 1;
+  }
+}
+
+.oly-flicker {
+  animation: oly-flicker 9s ease-in-out infinite;
+}
+
+.oly-panel {
+  background: rgba(12, 8, 34, 0.78);
+  border: 1px solid rgba(201, 151, 58, 0.23);
+  backdrop-filter: blur(10px);
+  border-radius: 18px;
+}

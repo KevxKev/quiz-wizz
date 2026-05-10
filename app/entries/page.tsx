@@ -1,0 +1,259 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+
+import { Btn, G, Meander, ModeBadge, Panel, TX, YoutubeMock } from "@/components/olympus";
+import { mergeQuizEntries, readStoredQuizEntries, removeStoredQuizEntry } from "@/lib/room";
+import { formatSupabaseErrorMessage, getSupabaseBrowserClient, getSupabaseSetupMessage } from "@/lib/supabase";
+import type { QuizEntry } from "@/types/game";
+
+type EntryRow = QuizEntry;
+
+export default function EntriesPage() {
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const [entries, setEntries] = useState<EntryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("Loading vault...");
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [preview, setPreview] = useState<EntryRow | null>(null);
+
+  const loadEntries = async () => {
+    const localEntries = readStoredQuizEntries();
+
+    if (!supabase) {
+      setEntries(localEntries);
+      setStatus(`${getSupabaseSetupMessage()} Showing ${localEntries.length} local entr${localEntries.length === 1 ? "y" : "ies"}.`);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("quiz_entries")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      const mapped = (data ?? []).map((row) => ({ ...row, answer_options: Array.isArray(row.answer_options) ? row.answer_options : [] })) as EntryRow[];
+      const merged = mergeQuizEntries(mapped, localEntries);
+      setEntries(merged);
+      setStatus(`Loaded ${merged.length} entries.`);
+    } catch (error) {
+      setEntries(localEntries);
+      setStatus(`${formatSupabaseErrorMessage(error, "Could not load entries.")} Showing local entries instead.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadEntries();
+  }, []);
+
+  const filtered = entries.filter((e) => {
+    const text = `${e.title ?? ""} ${e.artist ?? ""}`.toLowerCase();
+    const matchSearch = text.includes(search.toLowerCase());
+    const matchMode = filter === "all" || e.playback_mode === filter;
+    return matchSearch && matchMode;
+  });
+
+  const removeEntry = async (id: string) => {
+    removeStoredQuizEntry(id);
+
+    if (!supabase) {
+      setEntries((prev) => prev.filter((e) => e.id !== id));
+      setStatus("Entry removed from local vault.");
+      return;
+    }
+    try {
+      const { error } = await supabase.from("quiz_entries").delete().eq("id", id);
+      if (error) throw error;
+      setEntries((prev) => prev.filter((e) => e.id !== id));
+      setStatus("Entry removed.");
+    } catch (error) {
+      setStatus(formatSupabaseErrorMessage(error, "Could not delete entry."));
+    }
+  };
+
+  return (
+    <main style={{ minHeight: "100vh", padding: "28px 40px", position: "relative", zIndex: 2 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontFamily: "Cinzel,serif", fontSize: 32, fontWeight: 900, color: TX, letterSpacing: ".08em", margin: 0 }}>
+            Entry Vault
+          </h1>
+          <p style={{ color: `${TX}44`, fontSize: 13, marginTop: 4 }}>{status}</p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/" style={{ textDecoration: "none" }}>
+            <Btn variant="ghost" size="sm">Home</Btn>
+          </Link>
+          <Link href="/submit" style={{ textDecoration: "none" }}>
+            <Btn size="md">+ Add Entry</Btn>
+          </Link>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center" }}>
+        <input
+          style={{
+            padding: "9px 14px",
+            background: "rgba(255,255,255,.05)",
+            border: `1px solid ${G}33`,
+            borderRadius: 8,
+            color: TX,
+            fontSize: 13,
+            fontFamily: "Plus Jakarta Sans,sans-serif",
+            outline: "none",
+            width: 280,
+          }}
+          placeholder="Search songs or artists..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+
+        <div style={{ display: "flex", gap: 4 }}>
+          {[
+            { value: "all", label: "All" },
+            { value: "audio-only", label: "Audio" },
+            { value: "video-only", label: "Video" },
+            { value: "audio-video", label: "A+V" },
+          ].map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setFilter(f.value)}
+              style={{
+                padding: "6px 14px",
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                background: filter === f.value ? G : "transparent",
+                color: filter === f.value ? "#07051a" : `${TX}55`,
+                border: filter === f.value ? "none" : `1px solid ${G}22`,
+                letterSpacing: ".05em",
+              }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <span style={{ color: `${TX}33`, fontSize: 13, marginLeft: "auto" }}>{filtered.length} shown</span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
+        {filtered.map((e) => (
+          <Panel key={e.id} style={{ padding: "18px", display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <ModeBadge mode={e.playback_mode} />
+              <span style={{ color: `${TX}33`, fontSize: 11 }}>{e.clip_start_seconds}s-{e.clip_end_seconds}s</span>
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: TX, marginBottom: 3 }}>{e.title ?? "Untitled"}</div>
+              <div style={{ fontSize: 13, color: `${TX}66` }}>{e.artist ?? "Unknown Artist"}</div>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              {e.answer_options.map((opt, i) => {
+                const letter = String.fromCharCode(65 + i);
+                return (
+                  <span
+                    key={`${e.id}-${letter}`}
+                    style={{
+                      fontSize: 11,
+                      padding: "2px 8px",
+                      borderRadius: 4,
+                      background: e.correct_answer === letter ? `${G}22` : "rgba(255,255,255,.05)",
+                      border: `1px solid ${e.correct_answer === letter ? `${G}44` : "rgba(255,255,255,.08)"}`,
+                      color: e.correct_answer === letter ? G : `${TX}55`,
+                    }}
+                  >
+                    {letter}. {opt}
+                  </span>
+                );
+              })}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+              <Btn onClick={() => setPreview(e)} variant="ghost" size="sm" style={{ flex: 1, textAlign: "center", padding: "6px 0" }}>
+                Preview
+              </Btn>
+              <Link href="/submit" style={{ textDecoration: "none", flex: 1 }}>
+                <Btn variant="dark" size="sm" style={{ width: "100%", textAlign: "center", padding: "6px 0" }}>Edit</Btn>
+              </Link>
+              <button
+                type="button"
+                onClick={() => void removeEntry(e.id)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(200,60,60,.3)",
+                  background: "rgba(200,60,60,.08)",
+                  color: "#C06060",
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </Panel>
+        ))}
+
+        {!loading && filtered.length === 0 && (
+          <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "60px 0", color: `${TX}33` }}>
+            <div style={{ fontFamily: "Cinzel,serif", fontSize: 18 }}>The vault is empty</div>
+            <p style={{ fontSize: 13, marginTop: 6 }}>No entries match your search.</p>
+          </div>
+        )}
+      </div>
+
+      {preview && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 500,
+            background: "rgba(0,0,0,.8)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onClick={() => setPreview(null)}
+        >
+          <div onClick={(e) => e.stopPropagation()}>
+            <Panel style={{ padding: 28, maxWidth: 640, width: "90%" }}>
+              <Meander side="top" />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div>
+                  <h2 style={{ fontFamily: "Cinzel,serif", fontSize: 22, color: TX, margin: 0 }}>{preview.title}</h2>
+                  <p style={{ color: `${TX}55`, fontSize: 13, margin: "4px 0 0" }}>{preview.artist}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreview(null)}
+                  style={{
+                    background: "none",
+                    border: `1px solid ${G}33`,
+                    borderRadius: 6,
+                    color: `${TX}55`,
+                    fontSize: 14,
+                    padding: "6px 14px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <YoutubeMock mode={preview.playback_mode} w="100%" h={300} />
+            </Panel>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
