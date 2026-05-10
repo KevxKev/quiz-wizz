@@ -869,111 +869,154 @@ export default function HostPage() {
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrTarget)}`;
 
   const renderLobby = () => (
-    <>
-      <div style={{ textAlign: "center", position: "relative", zIndex: 2 }}>
-        <Laurel size={52}>
-          <h1 className="gold-shimmer flicker" style={{ fontFamily: "Cinzel,serif", fontSize: 80, fontWeight: 900, letterSpacing: ".12em", lineHeight: 1, margin: 0 }}>
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      height: "100vh",
+      width: "100%",
+      padding: "28px 60px 32px",
+      gap: 0,
+      position: "relative",
+      zIndex: 2,
+    }}>
+
+      {/* ── TOP: Title ── */}
+      <div style={{ textAlign: "center", flexShrink: 0 }}>
+        <Laurel size={44}>
+          <h1 className="gold-shimmer flicker" style={{ fontFamily: "Cinzel,serif", fontSize: 68, fontWeight: 900, letterSpacing: ".12em", lineHeight: 1, margin: 0 }}>
             OLYMPUS NIGHT
           </h1>
         </Laurel>
-        <p style={{ color: `${G}88`, fontFamily: "Cinzel,serif", fontSize: 16, letterSpacing: ".35em", marginTop: 6 }}>
-          MUSIC QUIZ - PARTY EDITION
+        <p style={{ color: `${G}77`, fontFamily: "Cinzel,serif", fontSize: 13, letterSpacing: ".35em", marginTop: 4 }}>
+          MUSIC QUIZ · PARTY EDITION
         </p>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, position: "relative", zIndex: 2 }}>
-        <p style={{ color: `${TX}66`, letterSpacing: ".1em", fontSize: 15 }}>
-          JOIN AT <strong style={{ color: TX }}>{joinPageUrl}</strong>
-        </p>
+      {/* ── MIDDLE: Room info left · Player grid right ── */}
+      <div style={{ flex: 1, display: "flex", gap: 40, alignItems: "center", minHeight: 0, marginTop: 20 }}>
 
-        {room ? (
+        {/* LEFT — join URL + room code + QR */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, flexShrink: 0, width: 380 }}>
+          <p style={{ color: `${TX}55`, letterSpacing: ".12em", fontSize: 13, textAlign: "center" }}>
+            JOIN AT <strong style={{ color: TX }}>{joinPageUrl}</strong>
+          </p>
+
+          {room ? (
+            <>
+              <Panel glow style={{ padding: "14px 40px", textAlign: "center", position: "relative", width: "100%" }}>
+                <Meander side="top" />
+                <Meander side="bottom" />
+                <p style={{ color: `${TX}33`, fontSize: 10, letterSpacing: ".3em", marginBottom: 4 }}>ROOM CODE</p>
+                <div className="gold-shimmer" style={{ fontFamily: "Cinzel,serif", fontSize: 88, fontWeight: 900, letterSpacing: ".2em", lineHeight: 1 }}>
+                  {room.code}
+                </div>
+              </Panel>
+
+              <Panel style={{ padding: "12px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 150, height: 150, background: "white", borderRadius: 8, overflow: "hidden" }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={qrCodeUrl} alt={`QR code for room ${room.code}`} style={{ width: "100%", height: "100%" }} />
+                </div>
+                <p style={{ color: `${TX}44`, fontSize: 10, letterSpacing: ".15em" }}>SCAN TO JOIN</p>
+              </Panel>
+            </>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+              {statusMsg && <p style={{ color: `${TX}66`, fontSize: 13, textAlign: "center" }}>{statusMsg}</p>}
+              <Btn onClick={handleCreateRoom} disabled={isCreatingRoom} size="lg">
+                {isCreatingRoom ? "SUMMONING" : "CREATE ROOM"}
+              </Btn>
+            </div>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div style={{ width: 1, alignSelf: "stretch", background: `linear-gradient(to bottom, transparent, ${G}22, transparent)`, flexShrink: 0 }} />
+
+        {/* RIGHT — player grid */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <span style={{ color: `${TX}44`, letterSpacing: ".2em", fontSize: 12 }}>PLAYERS JOINED</span>
+            <span style={{ fontFamily: "Cinzel,serif", fontSize: 20, color: G }}>{players.length} / 8</span>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+            {players.map((p) => (
+              <Panel key={p.id} style={{
+                padding: "14px 16px",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                boxShadow: p.is_ready ? `0 0 0 1.5px ${G}, 0 0 18px ${G}55` : undefined,
+                transition: "box-shadow .4s",
+              }}>
+                <Avatar name={p.nickname} size={36} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: p.is_ready ? G : TX }}>{p.nickname}</div>
+                  <div style={{ fontSize: 10, color: p.is_ready ? "#4CC870" : "#FF9820", marginTop: 2 }}>{p.is_ready ? "READY ✓" : "NOT READY"}</div>
+                </div>
+              </Panel>
+            ))}
+
+            {/* Empty slot placeholders */}
+            {Array.from({ length: Math.max(0, 4 - players.length) }).map((_, i) => (
+              <div key={`empty-${i}`} style={{
+                padding: "14px 16px",
+                borderRadius: 12,
+                border: `1px dashed ${G}18`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: 68,
+              }}>
+                <span style={{ color: `${TX}14`, fontSize: 11, letterSpacing: ".1em" }}>WAITING...</span>
+              </div>
+            ))}
+          </div>
+
+          {players.length === 0 && (
+            <p style={{ color: `${TX}22`, fontSize: 13, letterSpacing: ".15em", textAlign: "center", marginTop: 8 }}>
+              Waiting for players to join...
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* ── BOTTOM: Rounds + Start ── */}
+      {room && (
+        <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 10, paddingTop: 16, borderTop: `1px solid ${G}18`, marginTop: 12 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ color: `${TX}44`, fontSize: 12, letterSpacing: ".15em" }}>ROUNDS</span>
+            {([5, 25, 50] as const).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setSelectedTotalRounds(n)}
+                style={{
+                  padding: "6px 20px",
+                  borderRadius: 8,
+                  border: `1.5px solid ${selectedTotalRounds === n ? G : `${G}33`}`,
+                  background: selectedTotalRounds === n ? `${G}18` : "transparent",
+                  color: selectedTotalRounds === n ? G : `${TX}44`,
+                  fontFamily: "Cinzel,serif",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  letterSpacing: ".05em",
+                  transition: "all .15s",
+                }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
           <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-            <Panel glow style={{ padding: "16px 52px", textAlign: "center", position: "relative" }}>
-              <Meander side="top" />
-              <Meander side="bottom" />
-              <div className="gold-shimmer" style={{ fontFamily: "Cinzel,serif", fontSize: 120, fontWeight: 900, letterSpacing: ".2em", lineHeight: 1 }}>
-                {room.code}
-              </div>
-            </Panel>
-
-            <Panel style={{ padding: "14px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 136, height: 136, background: "white", borderRadius: 8, overflow: "hidden" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={qrCodeUrl} alt={`QR code for room ${room.code}`} style={{ width: "100%", height: "100%" }} />
-              </div>
-              <p style={{ color: `${TX}44`, fontSize: 10, letterSpacing: ".15em" }}>SCAN TO JOIN</p>
-            </Panel>
+            <span style={{ color: `${TX}33`, fontSize: 13 }}>{players.filter((p) => p.is_ready).length} of {players.length} ready</span>
+            <Btn size="lg" onClick={handleStartGame}>START GAME</Btn>
           </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-            {statusMsg && <p style={{ color: `${TX}66`, fontSize: 13, maxWidth: 480, textAlign: "center" }}>{statusMsg}</p>}
-            <Btn onClick={handleCreateRoom} disabled={isCreatingRoom} size="lg">
-              {isCreatingRoom ? "SUMMONING" : "CREATE ROOM"}
-            </Btn>
-          </div>
-        )}
-      </div>
-
-      <div style={{ width: "100%", maxWidth: 1100, position: "relative", zIndex: 2 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-          <span style={{ color: `${TX}55`, letterSpacing: ".18em", fontSize: 13 }}>PLAYERS JOINED</span>
-          <span style={{ fontFamily: "Cinzel,serif", fontSize: 18, color: G }}>{players.length} / 8</span>
         </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 10, minHeight: 70 }}>
-          {players.map((p) => (
-            <Panel key={p.id} style={{
-              padding: "14px 16px",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              boxShadow: p.is_ready ? `0 0 0 1.5px ${G}, 0 0 18px ${G}55` : undefined,
-              transition: "box-shadow .4s",
-            }}>
-              <Avatar name={p.nickname} size={38} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: p.is_ready ? G : TX }}>{p.nickname}</div>
-                <div style={{ fontSize: 11, color: p.is_ready ? "#4CC870" : "#FF9820", marginTop: 2 }}>{p.is_ready ? "READY ✓" : "NOT READY"}</div>
-              </div>
-            </Panel>
-          ))}
-        </div>
-
-        {room && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center", marginTop: 16 }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span style={{ color: `${TX}44`, fontSize: 12, letterSpacing: ".15em" }}>ROUNDS</span>
-              {([5, 25, 50] as const).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setSelectedTotalRounds(n)}
-                  style={{
-                    padding: "6px 18px",
-                    borderRadius: 8,
-                    border: `1.5px solid ${selectedTotalRounds === n ? G : `${G}33`}`,
-                    background: selectedTotalRounds === n ? `${G}18` : "transparent",
-                    color: selectedTotalRounds === n ? G : `${TX}55`,
-                    fontFamily: "Cinzel,serif",
-                    fontSize: 15,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    letterSpacing: ".05em",
-                    transition: "all .15s",
-                  }}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-              <span style={{ color: `${TX}44`, fontSize: 14 }}>{players.filter((p) => p.is_ready).length} of {players.length} ready</span>
-              <Btn size="lg" onClick={handleStartGame}>START GAME</Btn>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
+      )}
+    </div>
   );
 
   const renderGameHeader = () => (
