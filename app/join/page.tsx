@@ -144,21 +144,20 @@ function JoinPageInner() {
           }}
         >
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 56, marginBottom: 8 }}>LIGHTNING</div>
             <h1
               className="gold-shimmer"
               style={{
                 fontFamily: "Cinzel,serif",
-                fontSize: 36,
+                fontSize: 42,
                 fontWeight: 900,
-                letterSpacing: ".1em",
-                lineHeight: 1,
+                letterSpacing: ".12em",
+                lineHeight: 1.1,
                 margin: 0,
               }}
             >
               OLYMPUS<br />NIGHT
             </h1>
-            <p style={{ color: `${TX}44`, fontSize: 11, letterSpacing: ".3em", marginTop: 8 }}>JOIN THE GAME</p>
+            <p style={{ color: `${TX}44`, fontSize: 11, letterSpacing: ".3em", marginTop: 10 }}>JOIN THE GAME</p>
           </div>
 
           <Panel
