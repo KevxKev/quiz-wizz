@@ -1168,16 +1168,17 @@ export default function HostPage() {
         </div>
 
         {/* Two-column layout: 75% video left, 25% leaderboard right */}
-        <div style={{ flex: 1, display: "flex", gap: 20, overflow: "hidden", width: "100%", zIndex: 2, padding: "0 24px 14px" }}>
+        <div style={{ flex: 1, display: "flex", gap: 20, width: "100%", zIndex: 2, padding: "6px 24px 14px", minHeight: 0 }}>
 
-          {/* LEFT — video 75%, fills available height; padding lets glow show on all sides */}
-          <div style={{ flex: 3, display: "flex", flexDirection: "column", minWidth: 0, padding: 6 }}>
+          {/* LEFT — video 75%, fills available height; padding gives glow room on all sides */}
+          <div style={{ flex: 3, display: "flex", flexDirection: "column", minWidth: 0, padding: 8 }}>
             <div
               className="revealed-player-glow"
               style={{
                 flex: 1,
                 borderRadius: 16,
                 overflow: "hidden",
+                minHeight: 0,
               }}
             >
               <TimedYouTubePlayer
@@ -1337,7 +1338,7 @@ export default function HostPage() {
           </div>
 
           {/* Full leaderboard */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, overflowY: "auto", padding: "4px 6px" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, overflow: "visible", padding: "4px 10px", minHeight: 0 }}>
             {sorted.map((p, i) => (
               <div
                 key={p.player_id}
@@ -1350,7 +1351,8 @@ export default function HostPage() {
                   gap: 20,
                   background: i === 0 ? "rgba(201,151,58,.15)" : "rgba(13,10,40,.8)",
                   border: i === 0 ? `2px solid ${G}88` : "1px solid rgba(255,255,255,.06)",
-                  flexShrink: 0,
+                  flex: i === 0 ? "0 0 auto" : 1,
+                  minHeight: 0,
                   transition: "all .3s",
                 }}
               >

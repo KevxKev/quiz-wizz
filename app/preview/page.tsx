@@ -204,16 +204,16 @@ function PhaseRevealed() {
         </Panel>
       </div>
 
-      <div style={{ flex: 1, display: "flex", gap: 20, overflow: "hidden", width: "100%", zIndex: 2, padding: "0 24px 14px" }}>
-        <div style={{ flex: 3, display: "flex", flexDirection: "column", minWidth: 0, padding: 6 }}>
-          <div className="revealed-player-glow" style={{ flex: 1, borderRadius: 16, overflow: "hidden", background: "rgba(0,0,0,.7)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ flex: 1, display: "flex", gap: 20, width: "100%", zIndex: 2, padding: "6px 24px 14px", minHeight: 0 }}>
+        <div style={{ flex: 3, display: "flex", flexDirection: "column", minWidth: 0, padding: 8 }}>
+          <div className="revealed-player-glow" style={{ flex: 1, borderRadius: 16, overflow: "hidden", background: "rgba(0,0,0,.7)", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 0 }}>
             <p style={{ color: `${TX}33`, fontSize: 16, letterSpacing: ".1em" }}>▶ YouTube player (full reveal)</p>
           </div>
         </div>
 
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
           <p style={{ color: `${TX}33`, fontSize: 11, letterSpacing: ".22em", textAlign: "center", flexShrink: 0 }}>STANDINGS</p>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, overflowY: "auto" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, overflow: "visible", minHeight: 0 }}>
             {MOCK_LEADERBOARD.map((p, i) => {
               const ans = answersByPlayer.get(p.player_id);
               const correct = ans?.answer_text === MOCK_ROUND.correct_answer;
@@ -314,7 +314,7 @@ function PhaseWinner() {
           </Laurel>
         </div>
 
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, overflowY: "auto", padding: "4px 6px" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, overflow: "visible", padding: "4px 10px", minHeight: 0 }}>
           {sorted.map((p, i) => (
             <div
               key={p.id}
@@ -327,7 +327,8 @@ function PhaseWinner() {
                 gap: 20,
                 background: i === 0 ? "rgba(201,151,58,.15)" : "rgba(13,10,40,.8)",
                 border: i === 0 ? `2px solid ${G}88` : "1px solid rgba(255,255,255,.06)",
-                flexShrink: 0,
+                flex: i === 0 ? "0 0 auto" : 1,
+                minHeight: 0,
               }}
             >
               <span style={{ fontFamily: "Cinzel,serif", fontSize: i === 0 ? 36 : 20, fontWeight: 900, color: i === 0 ? G : `${TX}55`, width: 50, textAlign: "center", flexShrink: 0, lineHeight: 1 }}>
