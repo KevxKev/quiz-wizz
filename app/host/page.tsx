@@ -458,17 +458,8 @@ export default function HostPage() {
   }, [players, room?.status, isAdvancingPhase]);
 
   // ── AUTO-ADVANCE 4: all players ready in lobby ───────────────────────────────────────
-  // Starts the game automatically the moment every player has tapped "I'm Ready".
-  useEffect(() => {
-    if (room?.status !== "lobby") return;
-    if (players.length === 0) return;
-    if (isAdvancingPhase) return;
-    const allReady = players.every((p) => p.is_ready);
-    if (!allReady) return;
-    void handleStartGame();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [players, room?.status, isAdvancingPhase]);
-
+  // NOTE: auto-start removed — host (or any player via the phone START GAME button) must
+  // manually press START GAME so a single player can't accidentally start the game.
   // ── AUTO-ADVANCE 5: all players vote to play again ──────────────────────────────────
   // When the game is finished and every player has tapped "Play Again", restart automatically.
   useEffect(() => {
@@ -1135,11 +1126,21 @@ export default function HostPage() {
     const nonHostPlayers = players.filter((p) => !p.is_host);
     const worthyYes = nonHostPlayers.filter((p) => p.worthy_vote === true).length;
     const REVEALED_MAX = getPhaseDurationSeconds("revealed");
+    const correctIndex = round?.correct_answer ? round.correct_answer.charCodeAt(0) - 65 : -1;
+    const correctAnswerText = correctIndex >= 0 ? (round?.answer_options?.[correctIndex] ?? null) : null;
 
     return (
       <>
-        {/* Compact header: ROUND | centred title | ROOM — no bolt */}
-        <div style={{ display: "flex", alignItems: "center", width: "100%", padding: "8px 16px 4px", zIndex: 2, gap: 16, flexShrink: 0 }}>
+        <style>{`
+          @keyframes revealed-glow-pulse {
+            0%,100% { box-shadow: 0 0 0 2px #C9973A, 0 0 18px 3px #C9973Acc, 0 0 50px 8px #C9973A44; }
+            50%     { box-shadow: 0 0 0 2px #E8C55A, 0 0 32px 7px #E8C55Aee, 0 0 80px 16px #E8C55A55; }
+          }
+          .revealed-player-glow { animation: revealed-glow-pulse 2.4s ease-in-out infinite; }
+        `}</style>
+
+        {/* Header: ROUND | big answer reveal | ROOM */}
+        <div style={{ display: "flex", alignItems: "center", width: "100%", padding: "8px 16px 6px", zIndex: 2, gap: 16, flexShrink: 0 }}>
           <Panel style={{ padding: "8px 18px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <span style={{ color: `${TX}55`, fontSize: 11, letterSpacing: ".2em" }}>ROUND</span>
             <span style={{ fontFamily: "Cinzel,serif", fontSize: 22, fontWeight: 700, color: G }}>
@@ -1148,12 +1149,20 @@ export default function HostPage() {
           </Panel>
 
           <div style={{ flex: 1, textAlign: "center" }}>
-            <p style={{ color: `${TX}44`, letterSpacing: ".3em", fontSize: 10, marginBottom: 1 }}>THE ANSWER WAS</p>
-            <Laurel size={36}>
-              <h1 className="gold-shimmer" style={{ fontFamily: "Cinzel,serif", fontSize: 46, fontWeight: 900, letterSpacing: ".06em", lineHeight: 1.1, margin: 0 }}>
+            <p style={{ color: `${TX}44`, letterSpacing: ".3em", fontSize: 10, marginBottom: 2 }}>THE ANSWER WAS</p>
+            <Laurel size={48}>
+              <h1 className="gold-shimmer" style={{ fontFamily: "Cinzel,serif", fontSize: 64, fontWeight: 900, letterSpacing: ".06em", lineHeight: 1, margin: 0 }}>
                 {round?.correct_answer ?? "?"}
               </h1>
             </Laurel>
+            {correctAnswerText && (
+              <p style={{ fontFamily: "Cinzel,serif", fontSize: 18, color: TX, letterSpacing: ".05em", marginTop: 4, lineHeight: 1.2 }}>{correctAnswerText}</p>
+            )}
+            {(round?.entry_title || round?.entry_artist) && (
+              <p style={{ color: `${TX}66`, fontSize: 13, marginTop: 3, fontStyle: "italic" }}>
+                {round.entry_title}{round.entry_title && round.entry_artist ? " — " : ""}{round.entry_artist}
+              </p>
+            )}
           </div>
 
           <Panel style={{ padding: "8px 18px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
@@ -1162,26 +1171,34 @@ export default function HostPage() {
           </Panel>
         </div>
 
-        {/* Two-column layout: video left, panel right */}
+        {/* Two-column layout: video left (fixed height), wider leaderboard right */}
         <div style={{ flex: 1, display: "flex", gap: 0, overflow: "hidden", width: "100%", zIndex: 2, padding: "0 16px 10px" }}>
 
-          {/* LEFT — video fills all remaining height */}
-          <div style={{ flex: 1, overflow: "hidden", borderRadius: 10, minHeight: 0 }}>
-            <TimedYouTubePlayer
-              ref={clipPlayerRef}
-              videoId={preparedClip.videoId}
-              startSeconds={preparedClip.startSeconds}
-              endSeconds={preparedClip.endSeconds}
-              playbackMode="audio-video"
-              autoPlayRequestKey={preparedClip.autoPlayRequestKey}
-              naked
-            />
+          {/* LEFT — video at contained height with gold glow */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", paddingRight: 14, minWidth: 0 }}>
+            <div
+              className="revealed-player-glow"
+              style={{
+                height: 260,
+                borderRadius: 16,
+                overflow: "hidden",
+                flexShrink: 0,
+              }}
+            >
+              <TimedYouTubePlayer
+                ref={clipPlayerRef}
+                videoId={preparedClip.videoId}
+                startSeconds={preparedClip.startSeconds}
+                endSeconds={preparedClip.endSeconds}
+                playbackMode="audio-video"
+                autoPlayRequestKey={preparedClip.autoPlayRequestKey}
+                naked
+              />
+            </div>
           </div>
 
-          <div style={{ width: 1, background: `${G}18`, flexShrink: 0 }} />
-
           {/* RIGHT — leaderboard with ✓/✗ + worthy strip + ring */}
-          <div style={{ width: 290, display: "flex", flexDirection: "column", gap: 8, paddingLeft: 16 }}>
+          <div style={{ width: 330, display: "flex", flexDirection: "column", gap: 8 }}>
             <p style={{ color: `${TX}33`, fontSize: 11, letterSpacing: ".22em", textAlign: "center", flexShrink: 0 }}>STANDINGS</p>
 
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, overflowY: "auto" }}>
@@ -1190,20 +1207,19 @@ export default function HostPage() {
                 const correct = !!round?.correct_answer && ans?.answer_text === round.correct_answer;
                 const answered = ans !== undefined;
                 return (
-                  <Panel key={p.player_id} style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 8, background: i === 0 ? "rgba(201,151,58,.1)" : "rgba(13,10,40,.8)" }}>
-                    <span style={{ width: 18, textAlign: "center", fontSize: i < 3 ? 14 : 11, fontFamily: "Cinzel,serif", color: G, flexShrink: 0 }}>{i + 1}</span>
-                    <Avatar name={p.nickname} size={24} />
+                  <Panel key={p.player_id} style={{ padding: "9px 14px", display: "flex", alignItems: "center", gap: 8, background: i === 0 ? "rgba(201,151,58,.1)" : "rgba(13,10,40,.8)" }}>
+                    <span style={{ width: 20, textAlign: "center", fontSize: i < 3 ? 15 : 11, fontFamily: "Cinzel,serif", color: G, flexShrink: 0 }}>{i + 1}</span>
+                    <Avatar name={p.nickname} size={26} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: "Cinzel,serif", fontSize: 12, fontWeight: 700, color: i === 0 ? G : TX, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.nickname}</div>
+                      <div style={{ fontFamily: "Cinzel,serif", fontSize: 13, fontWeight: 700, color: i === 0 ? G : TX, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.nickname}</div>
                     </div>
-                    {/* ✓ / ✗ badge */}
                     {answered && (
                       <div style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, background: correct ? "rgba(78,200,120,.18)" : "rgba(200,60,60,.18)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: correct ? "#4CC870" : "#E05555" }}>
                         {correct ? "✓" : "✗"}
                       </div>
                     )}
-                    {p.gain > 0 && <span style={{ color: "#4CC870", fontSize: 10, fontWeight: 600, flexShrink: 0 }}>+{p.gain}</span>}
-                    <div style={{ fontFamily: "Cinzel,serif", fontSize: i === 0 ? 15 : 12, fontWeight: 900, color: i === 0 ? G : TX, minWidth: 40, textAlign: "right", flexShrink: 0 }}>{p.score.toLocaleString()}</div>
+                    {p.gain > 0 && <span style={{ color: "#4CC870", fontSize: 11, fontWeight: 600, flexShrink: 0 }}>+{p.gain}</span>}
+                    <div style={{ fontFamily: "Cinzel,serif", fontSize: i === 0 ? 16 : 13, fontWeight: 900, color: i === 0 ? G : TX, minWidth: 44, textAlign: "right", flexShrink: 0 }}>{p.score.toLocaleString()}</div>
                   </Panel>
                 );
               })}

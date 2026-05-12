@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Avatar, Btn, G, OPTION_COLORS, Panel, Ring, TX } from "@/components/olympus";
-import { buildLeaderboard, computeAnswerScore, getClipPlayDurationSeconds, getCountdownSeconds, DEFAULT_ANSWERING_DURATION_SECONDS } from "@/lib/room";
+import { buildLeaderboard, buildRoundPayloadFromQuizEntry, computeAnswerScore, createPhaseDeadline, DEFAULT_ANSWERING_DURATION_SECONDS, getClipPlayDurationSeconds, getCountdownSeconds, getPhaseDurationSeconds, mergeQuizEntries, readStoredQuizEntries, selectQuizEntryForRound } from "@/lib/room";
 import { formatSupabaseErrorMessage, getSupabaseBrowserClient, getSupabaseSetupMessage } from "@/lib/supabase";
 import type { LeaderboardEntry, PlayerSession, Room, RoomPlayer, Round, RoundAnswer } from "@/types/game";
 
@@ -256,6 +256,38 @@ export default function AnswerPage() {
     }
   };
 
+  const handleStartGame = async () => {
+    if (!supabase || !session || !room) return;
+    try {
+      // Load entries
+      const localEntries = readStoredQuizEntries().filter((e) => e.is_active !== false);
+      const { data: usedRoundsData } = await supabase.from("rounds").select("quiz_entry_id").eq("room_id", room.id);
+      const usedEntryIds = new Set(((usedRoundsData ?? []) as { quiz_entry_id: string | null }[]).map((r) => r.quiz_entry_id).filter(Boolean) as string[]);
+      const { data: remoteData } = await supabase.from("quiz_entries").select("*").eq("is_active", true).order("created_at", { ascending: false }).limit(50);
+      const remoteEntries = ((remoteData ?? []) as Parameters<typeof mergeQuizEntries>[0]).map((e) => ({ ...e, answer_options: Array.isArray(e.answer_options) ? e.answer_options : [] }));
+      const allEntries = mergeQuizEntries(remoteEntries, localEntries).filter((e) => e.is_active !== false);
+      if (allEntries.length === 0) { setStatus("No quiz entries found."); return; }
+      const fresh = allEntries.filter((e) => !usedEntryIds.has(e.id));
+      const pick = selectQuizEntryForRound(fresh.length > 0 ? fresh : allEntries, 1);
+      if (!pick) { setStatus("Could not select an entry."); return; }
+      const payload = buildRoundPayloadFromQuizEntry(1, pick, "clip_playing");
+      const { data: newRound, error: roundError } = await supabase.from("rounds").insert({ room_id: room.id, ...payload }).select("*").single();
+      if (roundError) throw roundError;
+      await supabase.from("room_players").update({ worthy_vote: null }).eq("room_id", room.id).eq("is_host", false);
+      const { error: roomError } = await supabase.from("rooms").update({
+        current_round_id: newRound.id,
+        current_round_number: 1,
+        total_rounds: room.total_rounds ?? 5,
+        status: "playing",
+        phase_started_at: new Date().toISOString(),
+        phase_ends_at: createPhaseDeadline(getPhaseDurationSeconds("playing")),
+      }).eq("id", room.id);
+      if (roomError) throw roomError;
+    } catch (error) {
+      setStatus(formatSupabaseErrorMessage(error, "Could not start game."));
+    }
+  };
+
   const myRoomPlayer = roomPlayers.find((p) => p.player_id === session?.playerId);
   const isReady = myRoomPlayer?.is_ready === true;
 
@@ -305,11 +337,25 @@ export default function AnswerPage() {
         </Panel>
 
         {isReady ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, width: "100%" }}>
             <div style={{ padding: "14px 36px", borderRadius: 14, background: "rgba(78,200,120,.12)", border: "2px solid #4CC87088" }}>
               <p style={{ fontFamily: "Cinzel,serif", fontSize: 22, fontWeight: 900, color: "#4CC870", letterSpacing: ".1em", margin: 0 }}>READY ✓</p>
             </div>
-            <p style={{ color: `${TX}33`, fontSize: 13 }}>Waiting for host to start...</p>
+            <button
+              type="button"
+              onClick={() => void handleStartGame()}
+              style={{
+                padding: "16px 0",
+                borderRadius: 14,
+                background: `linear-gradient(135deg,#7B5000,${G},#E8C55A)`,
+                border: "none",
+                cursor: "pointer",
+                width: "100%",
+              }}
+            >
+              <p style={{ fontFamily: "Cinzel,serif", fontSize: 24, fontWeight: 900, color: "#07051a", letterSpacing: ".12em", margin: 0 }}>START GAME</p>
+            </button>
+            <p style={{ color: `${TX}33`, fontSize: 12 }}>Waiting for host to start...</p>
             {waitingDots}
           </div>
         ) : (
