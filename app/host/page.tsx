@@ -853,7 +853,8 @@ export default function HostPage() {
   }, [createRoundFromEntry, room, supabase]);
 
   const configuredSiteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim().replace(/\/$/, "");
-  const runtimeOrigin = typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+  const [runtimeOrigin, setRuntimeOrigin] = useState("");
+  useEffect(() => { setRuntimeOrigin(window.location.origin.replace(/\/$/, "")); }, []);
   // Prefer the actual browser origin (always accurate) over the env var which may point to an old deployment
   const siteUrl = runtimeOrigin || configuredSiteUrl || "http://localhost:3002";
   const joinPageUrl = `${siteUrl}/join`;
