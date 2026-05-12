@@ -1172,20 +1172,17 @@ export default function HostPage() {
           </Panel>
         </div>
 
-        {/* Two-column layout: video left (16:9 proper), wider leaderboard right */}
-        <div style={{ flex: 1, display: "flex", gap: 20, overflow: "hidden", width: "100%", zIndex: 2, padding: "0 24px 10px", alignItems: "flex-start" }}>
+        {/* Two-column layout: 75% video left, 25% leaderboard right */}
+        <div style={{ flex: 1, display: "flex", gap: 20, overflow: "hidden", width: "100%", zIndex: 2, padding: "0 24px 14px" }}>
 
-          {/* LEFT — video with proper 16:9 aspect ratio and gold glow */}
-          <div style={{ flex: 1, display: "flex", alignItems: "flex-start", justifyContent: "center", minWidth: 0 }}>
+          {/* LEFT — video 75%, fills available height */}
+          <div style={{ flex: 3, display: "flex", flexDirection: "column", minWidth: 0 }}>
             <div
               className="revealed-player-glow"
               style={{
-                width: "100%",
-                maxWidth: 560,
-                aspectRatio: "16/9",
+                flex: 1,
                 borderRadius: 16,
                 overflow: "hidden",
-                flexShrink: 0,
               }}
             >
               <TimedYouTubePlayer
@@ -1200,8 +1197,8 @@ export default function HostPage() {
             </div>
           </div>
 
-          {/* RIGHT — leaderboard with ✓/✗ + worthy strip + ring */}
-          <div style={{ width: 420, display: "flex", flexDirection: "column", gap: 8 }}>
+          {/* RIGHT — leaderboard 25% */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
             <p style={{ color: `${TX}33`, fontSize: 11, letterSpacing: ".22em", textAlign: "center", flexShrink: 0 }}>STANDINGS</p>
 
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, overflowY: "auto" }}>
