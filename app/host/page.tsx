@@ -1159,11 +1159,6 @@ export default function HostPage() {
             {correctAnswerText && (
               <p style={{ fontFamily: "Cinzel,serif", fontSize: 18, color: TX, letterSpacing: ".05em", marginTop: 4, lineHeight: 1.2 }}>{correctAnswerText}</p>
             )}
-            {(round?.entry_title || round?.entry_artist) && (
-              <p style={{ color: `${TX}66`, fontSize: 13, marginTop: 3, fontStyle: "italic" }}>
-                {round.entry_title}{round.entry_title && round.entry_artist ? " — " : ""}{round.entry_artist}
-              </p>
-            )}
           </div>
 
           <Panel style={{ padding: "8px 18px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
@@ -1175,8 +1170,8 @@ export default function HostPage() {
         {/* Two-column layout: 75% video left, 25% leaderboard right */}
         <div style={{ flex: 1, display: "flex", gap: 20, overflow: "hidden", width: "100%", zIndex: 2, padding: "0 24px 14px" }}>
 
-          {/* LEFT — video 75%, fills available height */}
-          <div style={{ flex: 3, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          {/* LEFT — video 75%, fills available height; padding lets glow show on all sides */}
+          <div style={{ flex: 3, display: "flex", flexDirection: "column", minWidth: 0, padding: 6 }}>
             <div
               className="revealed-player-glow"
               style={{
@@ -1318,28 +1313,79 @@ export default function HostPage() {
     const winner = sorted[0];
     const nonHostPlayers = players.filter((p) => !p.is_host);
     const playAgainVotes = nonHostPlayers.filter((p) => p.is_ready).length;
+    const allVoted = nonHostPlayers.length > 0 && playAgainVotes === nonHostPlayers.length;
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", position: "relative", zIndex: 2, gap: 18, padding: "0 40px" }}>
-        <p style={{ color: `${TX}44`, letterSpacing: ".3em", fontSize: 16 }}>CHAMPION OF OLYMPUS</p>
-        <div style={{ textAlign: "center" }}>
-          <Laurel size={64}>
-            <h1 className="gold-shimmer" style={{ fontFamily: "Cinzel,serif", fontSize: 96, fontWeight: 900, letterSpacing: ".1em", lineHeight: 1, margin: 0 }}>{winner?.nickname ?? "NO WINNER"}</h1>
-          </Laurel>
-          <p style={{ fontFamily: "Cinzel,serif", fontSize: 40, color: G, marginTop: 10 }}>{winner?.score?.toLocaleString() ?? "0"} pts</p>
-        </div>
-        {nonHostPlayers.length > 0 && (
-          <div style={{ textAlign: "center" }}>
-            <p style={{ color: `${TX}44`, fontSize: 13, letterSpacing: ".2em", marginBottom: 6 }}>PLAY AGAIN VOTES</p>
-            <p style={{ fontFamily: "Cinzel,serif", fontSize: 32, fontWeight: 900, color: playAgainVotes === nonHostPlayers.length && nonHostPlayers.length > 0 ? "#4CC870" : G }}>
-              {playAgainVotes} / {nonHostPlayers.length}
-            </p>
+      <>
+        <style>{`
+          @keyframes winner-glow-pulse {
+            0%,100% { box-shadow: 0 0 0 2px #C9973A, 0 0 24px 6px #C9973Acc, 0 0 60px 14px #C9973A44; }
+            50%     { box-shadow: 0 0 0 2px #E8C55A, 0 0 40px 10px #E8C55Aee, 0 0 90px 22px #E8C55A55; }
+          }
+          .winner-row-glow { animation: winner-glow-pulse 2s ease-in-out infinite; }
+        `}</style>
+
+        <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", position: "relative", zIndex: 2, padding: "20px 60px 24px", gap: 12 }}>
+
+          {/* Title */}
+          <div style={{ textAlign: "center", flexShrink: 0 }}>
+            <p style={{ color: `${TX}33`, letterSpacing: ".35em", fontSize: 11, marginBottom: 2 }}>CHAMPION OF OLYMPUS</p>
+            <Laurel size={52}>
+              <h1 className="gold-shimmer" style={{ fontFamily: "Cinzel,serif", fontSize: 80, fontWeight: 900, letterSpacing: ".1em", lineHeight: 1, margin: 0 }}>
+                {winner?.nickname ?? "NO WINNER"}
+              </h1>
+            </Laurel>
           </div>
-        )}
-        <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
-          <Btn onClick={() => void handlePlayAgain()} size="lg">PLAY AGAIN</Btn>
-          <Btn onClick={() => void handleReturnToMenu()} variant="ghost" size="lg">MAIN MENU</Btn>
+
+          {/* Full leaderboard */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, overflowY: "auto", padding: "4px 6px" }}>
+            {sorted.map((p, i) => (
+              <div
+                key={p.player_id}
+                className={i === 0 ? "winner-row-glow" : ""}
+                style={{
+                  borderRadius: 16,
+                  padding: i === 0 ? "18px 28px" : "13px 24px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 20,
+                  background: i === 0 ? "rgba(201,151,58,.15)" : "rgba(13,10,40,.8)",
+                  border: i === 0 ? `2px solid ${G}88` : "1px solid rgba(255,255,255,.06)",
+                  flexShrink: 0,
+                  transition: "all .3s",
+                }}
+              >
+                <span style={{ fontFamily: "Cinzel,serif", fontSize: i === 0 ? 36 : 20, fontWeight: 900, color: i === 0 ? G : `${TX}55`, width: 50, textAlign: "center", flexShrink: 0, lineHeight: 1 }}>
+                  {i === 0 ? "👑" : i + 1}
+                </span>
+                <Avatar name={p.nickname} size={i === 0 ? 52 : 38} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "Cinzel,serif", fontSize: i === 0 ? 30 : 18, fontWeight: 900, color: i === 0 ? G : TX, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.nickname}</div>
+                </div>
+                <div style={{ fontFamily: "Cinzel,serif", fontSize: i === 0 ? 36 : 22, fontWeight: 900, color: i === 0 ? G : TX, textAlign: "right", flexShrink: 0 }}>{p.score.toLocaleString()}<span style={{ fontSize: i === 0 ? 14 : 11, color: `${TX}44`, marginLeft: 4 }}>pts</span></div>
+              </div>
+            ))}
+          </div>
+
+          {/* Footer: play again votes + buttons */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, paddingTop: 4 }}>
+            {nonHostPlayers.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ color: `${TX}44`, fontSize: 11, letterSpacing: ".2em" }}>PLAY AGAIN</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {nonHostPlayers.map((p) => (
+                    <div key={p.id} style={{ width: 10, height: 10, borderRadius: "50%", background: p.is_ready ? "#4CC870" : "rgba(255,255,255,.1)", border: "1px solid rgba(255,255,255,.2)", transition: "background .4s" }} />
+                  ))}
+                </div>
+                <span style={{ fontFamily: "Cinzel,serif", fontSize: 20, fontWeight: 900, color: allVoted ? "#4CC870" : G }}>{playAgainVotes}/{nonHostPlayers.length}</span>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 14, marginLeft: "auto" }}>
+              <Btn onClick={() => void handlePlayAgain()} size="lg">PLAY AGAIN</Btn>
+              <Btn onClick={() => void handleReturnToMenu()} variant="ghost" size="lg">MAIN MENU</Btn>
+            </div>
+          </div>
         </div>
-      </div>
+      </>
     );
   };
 
