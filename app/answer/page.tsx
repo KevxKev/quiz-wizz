@@ -194,6 +194,8 @@ export default function AnswerPage() {
 
   useEffect(() => {
     if (!room?.phase_ends_at) return;
+    // Set immediately so the display is correct from the first render
+    setTimer(getCountdownSeconds(room.phase_ends_at, Date.now()) ?? 0);
     const id = window.setInterval(() => {
       const sec = getCountdownSeconds(room.phase_ends_at, Date.now()) ?? 0;
       setTimer(sec);
