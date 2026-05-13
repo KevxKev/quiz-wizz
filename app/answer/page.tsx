@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar, Btn, G, OPTION_COLORS, Panel, Ring, TX } from "@/components/olympus";
 import { buildLeaderboard, buildRoundPayloadFromQuizEntry, computeAnswerScore, createPhaseDeadline, DEFAULT_ANSWERING_DURATION_SECONDS, getClipPlayDurationSeconds, getCountdownSeconds, getPhaseDurationSeconds, mergeQuizEntries, readStoredQuizEntries, selectQuizEntryForRound } from "@/lib/room";
@@ -41,6 +41,7 @@ export default function AnswerPage() {
   const [answers, setAnswers] = useState<RoundAnswer[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [timer, setTimer] = useState(20);
+  const clockOffsetMsRef = useRef(0); // server clock - local clock
   const [status, setStatus] = useState("Loading current phase...");
 
   useEffect(() => {
@@ -194,10 +195,16 @@ export default function AnswerPage() {
 
   useEffect(() => {
     if (!room?.phase_ends_at) return;
+    // Calibrate server clock offset: phase_started_at is written by the server,
+    // so comparing it to Date.now() reveals how far the local clock is off.
+    if (room.phase_started_at) {
+      clockOffsetMsRef.current = new Date(room.phase_started_at).getTime() - Date.now();
+    }
+    const serverNow = () => Date.now() + clockOffsetMsRef.current;
     // Set immediately so the display is correct from the first render
-    setTimer(getCountdownSeconds(room.phase_ends_at, Date.now()) ?? 0);
+    setTimer(getCountdownSeconds(room.phase_ends_at, serverNow()) ?? 0);
     const id = window.setInterval(() => {
-      const sec = getCountdownSeconds(room.phase_ends_at, Date.now()) ?? 0;
+      const sec = getCountdownSeconds(room.phase_ends_at, serverNow()) ?? 0;
       setTimer(sec);
     }, 1000);
     return () => window.clearInterval(id);
