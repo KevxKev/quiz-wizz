@@ -1127,7 +1127,7 @@ export default function HostPage() {
     const nonHostPlayers = players.filter((p) => !p.is_host);
     const worthyYes = nonHostPlayers.filter((p) => p.worthy_vote === true).length;
     const REVEALED_MAX = getPhaseDurationSeconds("revealed");
-    const correctIndex = round?.correct_answer ? round.correct_answer.charCodeAt(0) - 65 : -1;
+    const correctIndex = round?.correct_answer && /^[A-D]$/i.test(round.correct_answer) ? round.correct_answer.toUpperCase().charCodeAt(0) - 65 : -1;
     const correctAnswerText = correctIndex >= 0 ? (round?.answer_options?.[correctIndex] ?? null) : null;
 
     return (
