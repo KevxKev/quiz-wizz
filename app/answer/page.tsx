@@ -41,6 +41,7 @@ export default function AnswerPage() {
   const [answers, setAnswers] = useState<RoundAnswer[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [timer, setTimer] = useState(20);
+  const [selectedTotalRounds, setSelectedTotalRounds] = useState<5 | 25 | 50>(5);
   const clockOffsetMsRef = useRef(0); // server clock - local clock
   const [status, setStatus] = useState("Loading current phase...");
 
@@ -286,7 +287,7 @@ export default function AnswerPage() {
       const { error: roomError } = await supabase.from("rooms").update({
         current_round_id: newRound.id,
         current_round_number: 1,
-        total_rounds: room.total_rounds ?? 5,
+        total_rounds: room.total_rounds ?? selectedTotalRounds,
         status: "playing",
         phase_started_at: new Date().toISOString(),
         phase_ends_at: createPhaseDeadline(getPhaseDurationSeconds("playing")),
@@ -349,6 +350,29 @@ export default function AnswerPage() {
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, width: "100%" }}>
             <div style={{ padding: "14px 36px", borderRadius: 14, background: "rgba(78,200,120,.12)", border: "2px solid #4CC87088" }}>
               <p style={{ fontFamily: "Cinzel,serif", fontSize: 22, fontWeight: 900, color: "#4CC870", letterSpacing: ".1em", margin: 0 }}>READY ✓</p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ color: `${TX}44`, fontSize: 12, letterSpacing: ".15em" }}>ROUNDS</span>
+              {([5, 25, 50] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setSelectedTotalRounds(n)}
+                  style={{
+                    padding: "6px 16px",
+                    borderRadius: 8,
+                    border: `1.5px solid ${selectedTotalRounds === n ? G : `${G}33`}`,
+                    background: selectedTotalRounds === n ? `${G}18` : "transparent",
+                    color: selectedTotalRounds === n ? G : `${TX}44`,
+                    fontFamily: "Cinzel,serif",
+                    fontSize: 15,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {n}
+                </button>
+              ))}
             </div>
             <button
               type="button"
