@@ -171,6 +171,10 @@ export default function EntriesPage() {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
               {e.answer_options.map((opt, i) => {
                 const letter = String.fromCharCode(65 + i);
+                // Support both old format (full text) and new format (letter A/B/C/D)
+                const isCorrect = /^[A-D]$/i.test(e.correct_answer ?? "")
+                  ? e.correct_answer?.toUpperCase() === letter
+                  : (e.correct_answer ?? "").trim().toLowerCase() === opt.trim().toLowerCase();
                 return (
                   <span
                     key={`${e.id}-${letter}`}
@@ -178,9 +182,9 @@ export default function EntriesPage() {
                       fontSize: 11,
                       padding: "2px 8px",
                       borderRadius: 4,
-                      background: e.correct_answer === letter ? `${G}22` : "rgba(255,255,255,.05)",
-                      border: `1px solid ${e.correct_answer === letter ? `${G}44` : "rgba(255,255,255,.08)"}`,
-                      color: e.correct_answer === letter ? G : `${TX}55`,
+                      background: isCorrect ? `${G}22` : "rgba(255,255,255,.05)",
+                      border: `1px solid ${isCorrect ? `${G}44` : "rgba(255,255,255,.08)"}`,
+                      color: isCorrect ? G : `${TX}55`,
                     }}
                   >
                     {letter}. {opt}

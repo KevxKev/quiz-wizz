@@ -122,12 +122,21 @@ export function buildRoundPayloadFromQuizEntry(
   entry: QuizEntry,
   state: RoundState = "clip_playing",
 ) {
+  // Normalize correct_answer to a single letter (A/B/C/D).
+  // Old entries stored the full answer text; new ones store the letter.
+  let correctAnswer = entry.correct_answer;
+  if (correctAnswer && !/^[A-D]$/i.test(correctAnswer)) {
+    const idx = entry.answer_options.findIndex(
+      (opt) => opt.trim().toLowerCase() === correctAnswer!.trim().toLowerCase()
+    );
+    if (idx >= 0) correctAnswer = String.fromCharCode(65 + idx);
+  }
   return {
     round_number: roundNumber,
     quiz_entry_id: entry.id.startsWith("local-") ? null : entry.id,
     prompt_text: entry.prompt_text,
     answer_options: [...entry.answer_options],
-    correct_answer: entry.correct_answer,
+    correct_answer: correctAnswer,
     youtube_video_id: entry.youtube_video_id,
     clip_start_seconds: entry.clip_start_seconds,
     clip_end_seconds: entry.clip_end_seconds,
