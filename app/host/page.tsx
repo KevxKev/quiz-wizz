@@ -553,8 +553,7 @@ export default function HostPage() {
         .from("quiz_entries")
         .select("*")
         .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .limit(50);
+        .order("created_at", { ascending: false });
 
       if (entriesError) {
         const pool = localEntries.filter((e) => !usedEntryIds.has(e.id));

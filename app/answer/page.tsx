@@ -98,8 +98,12 @@ export default function AnswerPage() {
         })) as Round[]);
         setAllRounds(normalizedRounds);
 
-        // Always reset selection eagerly — prevents stale lock-in from a previous round
-        setSelected(null);
+        // Reset selection only when switching to a different round (not on every poll)
+        setSelected((prev) => {
+          // We don't know the new round id yet here, so keep prev and let the
+          // per-round answer lookup below correct it if needed.
+          return prev;
+        });
 
         let roundData: RoundRow | null = null;
         if (currentRoom.current_round_id) {
@@ -129,9 +133,18 @@ export default function AnswerPage() {
           const normalized = (allAnswers ?? []) as RoundAnswer[];
           setAnswers(normalized);
 
-          // Restore selection only for the CURRENT round
+          // Restore selection from DB, but never clear a locally-set selection
+          // (avoids flicker when the DB write hasn't landed yet after tapping).
+          // When the round changes, mine will be undefined and prev will be stale —
+          // so clear if the round id doesn't match the previously selected round.
           const mine = normalized.find((a) => a.player_id === activeSession.playerId && a.round_id === roundData!.id);
-          setSelected(mine?.answer_text ?? null);
+          setSelected((prev) => {
+            // If DB confirms an answer for this round, use it
+            if (mine) return mine.answer_text;
+            // If we have a local optimistic selection, keep it (avoids flicker)
+            if (prev) return prev;
+            return null;
+          });
         } else {
           setRound(null);
           setAnswers([]);
@@ -178,6 +191,16 @@ export default function AnswerPage() {
       void supabase.removeChannel(channel);
     };
   }, [loadBundle, session, supabase]);
+
+  // Clear selection whenever the active round changes so a stale answer from the
+  // previous round is never shown on the new round's buttons.
+  const prevRoundIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (round?.id && round.id !== prevRoundIdRef.current) {
+      prevRoundIdRef.current = round.id;
+      setSelected(null);
+    }
+  }, [round?.id]);
 
   // Polling heartbeat — ensures phone stays in sync even if a subscription event is missed.
   // Also covers lobby/playing so the phone catches the game-start transition even if
@@ -273,7 +296,7 @@ export default function AnswerPage() {
       const localEntries = readStoredQuizEntries().filter((e) => e.is_active !== false);
       const { data: usedRoundsData } = await supabase.from("rounds").select("quiz_entry_id").eq("room_id", room.id);
       const usedEntryIds = new Set(((usedRoundsData ?? []) as { quiz_entry_id: string | null }[]).map((r) => r.quiz_entry_id).filter(Boolean) as string[]);
-      const { data: remoteData } = await supabase.from("quiz_entries").select("*").eq("is_active", true).order("created_at", { ascending: false }).limit(50);
+      const { data: remoteData } = await supabase.from("quiz_entries").select("*").eq("is_active", true).order("created_at", { ascending: false });
       const remoteEntries = ((remoteData ?? []) as Parameters<typeof mergeQuizEntries>[0]).map((e) => ({ ...e, answer_options: Array.isArray(e.answer_options) ? e.answer_options : [] }));
       const allEntries = mergeQuizEntries(remoteEntries, localEntries).filter((e) => e.is_active !== false);
       if (allEntries.length === 0) { setStatus("No quiz entries found."); return; }
