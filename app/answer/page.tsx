@@ -422,12 +422,12 @@ export default function AnswerPage() {
           {options.map((opt, i) => {
             const letter = String.fromCharCode(65 + i);
             const c = OPTION_COLORS[i];
-            const active = selected === opt;
+            const active = selected === letter;
             return (
               <button
                 key={letter}
                 type="button"
-                onClick={() => void submitAnswer(opt)}
+                onClick={() => void submitAnswer(letter)}
                 disabled={!!selected}
                 style={{
                   background: active ? `${c}30` : `${c}12`,
@@ -473,7 +473,7 @@ export default function AnswerPage() {
               <Panel style={{ textAlign: "center", padding: "16px 22px", width: "100%", position: "relative" }}>
                 <MeanderLine />
                 <p style={{ color: `${TX}33`, fontSize: 11, letterSpacing: ".2em", marginTop: 4 }}>CORRECT ANSWER</p>
-                <p style={{ fontFamily: "Cinzel,serif", fontSize: 22, color: G, fontWeight: 700, margin: "8px 0" }}>{round?.correct_answer ?? "-"}</p>
+                <p style={{ fontFamily: "Cinzel,serif", fontSize: 22, color: G, fontWeight: 700, margin: "8px 0" }}>{/^[A-D]$/.test(round?.correct_answer ?? "") ? (round?.answer_options?.[(round.correct_answer as string).charCodeAt(0) - 65] ?? round?.correct_answer) : (round?.correct_answer ?? "-")}</p>
                 <p style={{ color: `${TX}44`, fontSize: 12 }}>{round?.entry_title ?? ""}</p>
               </Panel>
             </>
@@ -490,11 +490,11 @@ export default function AnswerPage() {
           ) : (
             <>
               <h1 style={{ fontFamily: "Cinzel,serif", fontSize: 44, fontWeight: 900, color: "#C04040" }}>NOT QUITE</h1>
-              <p style={{ color: `${TX}55`, fontSize: 13 }}>You answered <strong style={{ color: TX }}>{myAnswer.answer_text}</strong></p>
+              <p style={{ color: `${TX}55`, fontSize: 13 }}>You answered <strong style={{ color: TX }}>{/^[A-D]$/.test(myAnswer.answer_text) ? (round?.answer_options?.[myAnswer.answer_text.charCodeAt(0) - 65] ?? myAnswer.answer_text) : myAnswer.answer_text}</strong></p>
               <Panel style={{ textAlign: "center", padding: "16px 22px", width: "100%", position: "relative" }}>
                 <MeanderLine />
                 <p style={{ color: `${TX}33`, fontSize: 11, letterSpacing: ".2em", marginTop: 4 }}>CORRECT ANSWER</p>
-                <p style={{ fontFamily: "Cinzel,serif", fontSize: 22, color: G, fontWeight: 700, margin: "8px 0" }}>{round?.correct_answer ?? "-"}</p>
+                <p style={{ fontFamily: "Cinzel,serif", fontSize: 22, color: G, fontWeight: 700, margin: "8px 0" }}>{/^[A-D]$/.test(round?.correct_answer ?? "") ? (round?.answer_options?.[(round.correct_answer as string).charCodeAt(0) - 65] ?? round?.correct_answer) : (round?.correct_answer ?? "-")}</p>
                 <p style={{ color: `${TX}44`, fontSize: 12 }}>{round?.entry_title ?? ""}</p>
               </Panel>
             </>
