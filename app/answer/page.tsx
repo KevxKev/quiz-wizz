@@ -142,6 +142,9 @@ function AnswerPageContent() {
   // Track when the clip answering window opens so we can record answer speed
   const clipStartedAtMsRef = useRef<number | null>(null);
   const trackedClipRoundIdRef = useRef<string | null>(null);
+  // Clears stale locked answer when the active round changes so buttons never
+  // stay frozen between rounds (the bug that required a page refresh to fix).
+  const prevRoundIdForLockRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!round?.id) {
@@ -304,6 +307,13 @@ function AnswerPageContent() {
           : "Waiting for the next round to load.",
       );
       return;
+    }
+
+    // If the round changed, immediately clear the previous answer lock so
+    // buttons are never disabled by a stale selection from the previous round.
+    if (activeRound.id !== prevRoundIdForLockRef.current) {
+      prevRoundIdForLockRef.current = activeRound.id;
+      setLockedAnswer(null);
     }
 
     setRound(activeRound);

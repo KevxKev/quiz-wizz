@@ -52,6 +52,8 @@ import { OlympusBackground, OlympusTransition } from "@/components/ui";
 
 type RoundCountSetting = "3" | "5" | "all";
 
+const WORTHY_FORCE_INTERVAL = 5; // force worthy_playing every N rounds if no worthy play occurred
+
 const ROUND_COUNT_OPTIONS: Array<{ value: RoundCountSetting; label: string }> = [
   { value: "3", label: "3 rounds" },
   { value: "5", label: "5 rounds" },
@@ -213,6 +215,11 @@ export default function HostPage() {
   const shuffledEntryOrderRef = useRef<string[]>([]);
   // Prevents the "early worthy trigger" from firing more than once per round
   const worthyAutoTriggeredRef = useRef(false);
+  // Tracks consecutive rounds with no worthy play; persisted to localStorage
+  // so a host browser refresh doesn't lose the count.
+  const roundsSinceLastWorthyRef = useRef(0);
+  // Stores entry IDs from the previous game to exclude them from the next shuffle.
+  const previousGameEntryIdsRef = useRef<Set<string>>(new Set());
   const soundtrackRef = useRef<HTMLAudioElement | null>(null);
   const soundtrackFadeRef = useRef<number | null>(null);
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
@@ -322,21 +329,39 @@ export default function HostPage() {
     };
   }, []);
 
-  // Early worthy trigger: as soon as >49 % of non-host players vote yes, skip waiting
-  // for the revealed-phase timer and go straight to worthy_playing.
+  // Early worthy trigger: fires when >49% vote yes OR when the forced-worthy
+  // streak threshold is reached (every WORTHY_FORCE_INTERVAL rounds with no worthy play).
   useEffect(() => {
     if (room?.status !== "revealed") return;
+    if (worthyAutoTriggeredRef.current) return;
+
+    // Restore streak from localStorage in case the host browser was refreshed.
+    if (room.id && typeof window !== "undefined") {
+      const raw = window.localStorage.getItem(`olympus-worthy-streak-${room.id}`);
+      if (raw !== null) {
+        const parsed = Number.parseInt(raw, 10);
+        if (Number.isFinite(parsed)) roundsSinceLastWorthyRef.current = parsed;
+      }
+    }
+
+    // Force worthy if the streak has reached the threshold.
+    const forcedWorthy = roundsSinceLastWorthyRef.current >= WORTHY_FORCE_INTERVAL - 1;
+    if (forcedWorthy) {
+      worthyAutoTriggeredRef.current = true;
+      void handleAdvancePhase("worthy-forced");
+      return;
+    }
 
     const nonHostCount = players.filter((p) => !p.is_host).length;
     if (nonHostCount === 0) return;
 
     const pct = (worthyVoteCount / nonHostCount) * 100;
-    if (pct > 49 && !worthyAutoTriggeredRef.current) {
+    if (pct > 49) {
       worthyAutoTriggeredRef.current = true;
       void handleAdvancePhase("worthy-early-vote");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worthyVoteCount, room?.status, players]);
+  }, [worthyVoteCount, room?.id, room?.status, players]);
 
   useEffect(() => {
     if (!room) {
@@ -504,6 +529,15 @@ export default function HostPage() {
       const normalizedRoom = roomData as Room;
       setRoom(normalizedRoom);
 
+      // Sync the round-count selector to whatever is stored in the DB so the
+      // TV always reflects the actual game length (Fix 4 — round count sync).
+      if (normalizedRoom.total_rounds) {
+        const stored = normalizedRoom.total_rounds;
+        const mapped: RoundCountSetting =
+          stored <= 3 ? "3" : stored <= 5 ? "5" : "all";
+        setRoundCountSetting(mapped);
+      }
+
       const [roomPlayersResult, roundsResult, answersResult] = await Promise.all([
         supabase
           .from("room_players")
@@ -658,7 +692,12 @@ export default function HostPage() {
       // On round 1 (or if the ref was cleared by a reset), shuffle all entry IDs
       // using Fisher-Yates so songs play in a random, non-repeating order.
       if (roundNumber === 1 || shuffledEntryOrderRef.current.length === 0) {
-        const ids = availableEntries.map((e) => e.id);
+        // Exclude songs played in the previous game (Fix 3 — play-again dedup).
+        const excludedIds = previousGameEntryIdsRef.current;
+        const freshEntries = availableEntries.filter((e) => !excludedIds.has(e.id));
+        // Fall back to the full pool only if every entry was played last game.
+        const pool = freshEntries.length > 0 ? freshEntries : availableEntries;
+        const ids = pool.map((e) => e.id);
         for (let i = ids.length - 1; i > 0; i -= 1) {
           const j = Math.floor(Math.random() * (i + 1));
           [ids[i], ids[j]] = [ids[j] as string, ids[i] as string];
@@ -864,7 +903,17 @@ export default function HostPage() {
             }
           }
 
-          if (worthyPercent > 49 && quorum > 0) {
+          // Fix 2 — forced worthy: read streak and decide whether to force.
+          const worthyStreak = roundsSinceLastWorthyRef.current;
+          const forcedWorthy = worthyStreak >= WORTHY_FORCE_INTERVAL - 1;
+          const goWorthy = forcedWorthy || (worthyPercent > 49 && quorum > 0);
+
+          if (goWorthy) {
+            // Reset streak — a worthy play (voted or forced) breaks the streak.
+            roundsSinceLastWorthyRef.current = 0;
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(`olympus-worthy-streak-${room.id}`, "0");
+            }
             // Transition to worthy_playing — full video until it ends (max 6 min fallback)
             const { error: worthyError } = await supabase
               .from("rooms")
@@ -876,8 +925,13 @@ export default function HostPage() {
               .eq("id", room.id);
 
             if (worthyError) throw worthyError;
-            setRoomStatus("The song is worthy! Playing full video now.");
+            setRoomStatus(forcedWorthy ? `Forced worthy after ${WORTHY_FORCE_INTERVAL} rounds — playing full video!` : "The song is worthy! Playing full video now.");
           } else {
+            // Increment streak — no worthy play this round.
+            roundsSinceLastWorthyRef.current += 1;
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(`olympus-worthy-streak-${room.id}`, String(roundsSinceLastWorthyRef.current));
+            }
             const totalRounds = room.total_rounds ?? currentRound?.round_number ?? room.current_round_number;
 
             if ((currentRound?.round_number ?? room.current_round_number) >= totalRounds) {
@@ -1129,6 +1183,18 @@ export default function HostPage() {
     logHostStep("Resetting room", { roomCode: room.code });
 
     try {
+      // Fix 3 — capture played entry IDs before deleting rounds so the next
+      // game's shuffle can exclude them (play-again deduplication).
+      const { data: playedRoundsData } = await supabase
+        .from("rounds")
+        .select("quiz_entry_id")
+        .eq("room_id", room.id);
+      previousGameEntryIdsRef.current = new Set(
+        ((playedRoundsData ?? []) as { quiz_entry_id: string | null }[])
+          .map((r) => r.quiz_entry_id)
+          .filter(Boolean) as string[],
+      );
+
       await supabase.from("answers").delete().eq("room_id", room.id);
       await supabase.from("rounds").delete().eq("room_id", room.id);
 
@@ -1156,6 +1222,12 @@ export default function HostPage() {
 
       if (roomResetError) {
         throw roomResetError;
+      }
+
+      // Reset worthy streak for this room on reset.
+      roundsSinceLastWorthyRef.current = 0;
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(`olympus-worthy-streak-${room.id}`);
       }
 
       preparedRoundRef.current = null;
