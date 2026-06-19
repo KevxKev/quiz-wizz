@@ -119,6 +119,8 @@ function fmtSpeed(ms: number | null | undefined): string {
   return (ms / 1000).toFixed(2) + "s";
 }
 
+const ANSWER_COLORS = ["#7040C8", "#C87040", "#4090C8", "#40B870"];
+
 function AnswerPageContent() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const searchParams = useSearchParams();
@@ -142,6 +144,9 @@ function AnswerPageContent() {
   // Track when the clip answering window opens so we can record answer speed
   const clipStartedAtMsRef = useRef<number | null>(null);
   const trackedClipRoundIdRef = useRef<string | null>(null);
+  // Clears stale locked answer when the active round changes so buttons never
+  // stay frozen between rounds (the bug that required a page refresh to fix).
+  const prevRoundIdForLockRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!round?.id) {
@@ -304,6 +309,13 @@ function AnswerPageContent() {
           : "Waiting for the next round to load.",
       );
       return;
+    }
+
+    // If the round changed, immediately clear the previous answer lock so
+    // buttons are never disabled by a stale selection from the previous round.
+    if (activeRound.id !== prevRoundIdForLockRef.current) {
+      prevRoundIdForLockRef.current = activeRound.id;
+      setLockedAnswer(null);
     }
 
     setRound(activeRound);
@@ -653,6 +665,8 @@ function AnswerPageContent() {
                   const isLockedChoice = lockedAnswer === option;
                   const isCorrectChoice = isRevealState && round.correct_answer === option;
                   const isWrongChoice = isRevealState && round.correct_answer !== option;
+                  const letter = String.fromCharCode(65 + index);
+                  const accent = ANSWER_COLORS[index % ANSWER_COLORS.length] ?? "#7040C8";
 
                   return (
                     <button
@@ -660,18 +674,30 @@ function AnswerPageContent() {
                       type="button"
                       onClick={() => handleAnswerSelect(option)}
                       disabled={Boolean(lockedAnswer) || isSubmitting || !isAnswering}
-                      className="touch-manipulation rounded-2xl px-4 py-4 text-left text-base font-semibold transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-90"
+                      className="touch-manipulation rounded-2xl px-4 py-4 text-left transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-90"
                       style={
                         isCorrectChoice
                           ? { border: "1px solid rgba(201,162,39,0.7)", background: "rgba(201,162,39,0.18)", color: "var(--oly-gold-bright)" }
                           : isWrongChoice
                             ? { border: "1px solid rgba(239,68,68,0.5)", background: "rgba(239,68,68,0.10)", color: "#fca5a5" }
                             : isLockedChoice
-                              ? { border: "1px solid rgba(201,162,39,0.45)", background: "rgba(201,162,39,0.10)", color: "var(--oly-gold-bright)" }
-                              : { border: "1px solid rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.35)", color: "white" }
+                              ? {
+                                  border: `2px solid ${accent}`,
+                                  background: `${accent}33`,
+                                  color: "#ffffff",
+                                  boxShadow: `0 0 24px ${accent}55`,
+                                }
+                              : {
+                                  border: `2px solid ${accent}88`,
+                                  background: `${accent}1a`,
+                                  color: "#f0eaff",
+                                }
                       }
                     >
-                      {option}
+                      <span className="block text-3xl font-black leading-none" style={{ fontFamily: "var(--font-cinzel)", color: isLockedChoice ? "#ffffff" : accent }}>
+                        {letter}
+                      </span>
+                      <span className="mt-2 block text-sm font-semibold leading-snug">{option}</span>
                     </button>
                   );
                 })}

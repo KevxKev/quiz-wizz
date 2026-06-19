@@ -52,6 +52,8 @@ import { OlympusBackground, OlympusTransition } from "@/components/ui";
 
 type RoundCountSetting = "3" | "5" | "all";
 
+const WORTHY_FORCE_INTERVAL = 5; // force worthy every N rounds with no worthy play
+
 const ROUND_COUNT_OPTIONS: Array<{ value: RoundCountSetting; label: string }> = [
   { value: "3", label: "3 rounds" },
   { value: "5", label: "5 rounds" },
@@ -213,6 +215,14 @@ export default function HostPage() {
   const shuffledEntryOrderRef = useRef<string[]>([]);
   // Prevents the "early worthy trigger" from firing more than once per round
   const worthyAutoTriggeredRef = useRef(false);
+  // Tracks how many consecutive rounds ended without a worthy play.
+  // Persisted to localStorage so it survives re-renders.
+  // When the streak reaches WORTHY_FORCE_INTERVAL - 1, the next revealed
+  // phase forces worthy_playing regardless of votes.
+  const roundsSinceLastWorthyRef = useRef(0);
+  // Stores quiz_entry_ids from the previous game so they are excluded from
+  // the next game's shuffle (play-again deduplication).
+  const previousGameEntryIdsRef = useRef<Set<string>>(new Set());
   const soundtrackRef = useRef<HTMLAudioElement | null>(null);
   const soundtrackFadeRef = useRef<number | null>(null);
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
@@ -324,19 +334,37 @@ export default function HostPage() {
 
   // Early worthy trigger: as soon as >49 % of non-host players vote yes, skip waiting
   // for the revealed-phase timer and go straight to worthy_playing.
+  // Also fires immediately if the forced-worthy streak threshold is reached.
   useEffect(() => {
     if (room?.status !== "revealed") return;
+    if (worthyAutoTriggeredRef.current) return;
+
+    // Restore streak from localStorage in case the host browser was refreshed
+    if (room.id && typeof window !== "undefined") {
+      const raw = window.localStorage.getItem(`olympus-worthy-streak-${room.id}`);
+      if (raw !== null) {
+        const parsed = Number.parseInt(raw, 10);
+        if (Number.isFinite(parsed)) roundsSinceLastWorthyRef.current = parsed;
+      }
+    }
+
+    const forcedWorthy = roundsSinceLastWorthyRef.current >= WORTHY_FORCE_INTERVAL - 1;
+    if (forcedWorthy) {
+      worthyAutoTriggeredRef.current = true;
+      void handleAdvancePhase("worthy-forced");
+      return;
+    }
 
     const nonHostCount = players.filter((p) => !p.is_host).length;
     if (nonHostCount === 0) return;
 
     const pct = (worthyVoteCount / nonHostCount) * 100;
-    if (pct > 49 && !worthyAutoTriggeredRef.current) {
+    if (pct > 49) {
       worthyAutoTriggeredRef.current = true;
       void handleAdvancePhase("worthy-early-vote");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worthyVoteCount, room?.status, players]);
+  }, [worthyVoteCount, room?.id, room?.status, players]);
 
   useEffect(() => {
     if (!room) {
@@ -504,6 +532,15 @@ export default function HostPage() {
       const normalizedRoom = roomData as Room;
       setRoom(normalizedRoom);
 
+      // Keep the round-count selector in sync with what the room actually has,
+      // so TV and phone always agree on the game length.
+      if (normalizedRoom.total_rounds) {
+        const stored = normalizedRoom.total_rounds;
+        const mapped: RoundCountSetting =
+          stored <= 3 ? "3" : stored <= 5 ? "5" : "all";
+        setRoundCountSetting(mapped);
+      }
+
       const [roomPlayersResult, roundsResult, answersResult] = await Promise.all([
         supabase
           .from("room_players")
@@ -658,7 +695,12 @@ export default function HostPage() {
       // On round 1 (or if the ref was cleared by a reset), shuffle all entry IDs
       // using Fisher-Yates so songs play in a random, non-repeating order.
       if (roundNumber === 1 || shuffledEntryOrderRef.current.length === 0) {
-        const ids = availableEntries.map((e) => e.id);
+        // Exclude songs played in the previous game (play-again deduplication)
+        const excludedIds = previousGameEntryIdsRef.current;
+        const freshEntries = availableEntries.filter((e) => !excludedIds.has(e.id));
+        // If all entries were played last game, fall back to the full pool
+        const pool = freshEntries.length > 0 ? freshEntries : availableEntries;
+        const ids = pool.map((e) => e.id);
         for (let i = ids.length - 1; i > 0; i -= 1) {
           const j = Math.floor(Math.random() * (i + 1));
           [ids[i], ids[j]] = [ids[j] as string, ids[i] as string];
@@ -864,7 +906,17 @@ export default function HostPage() {
             }
           }
 
-          if (worthyPercent > 49 && quorum > 0) {
+          // Forced-worthy rule: if WORTHY_FORCE_INTERVAL consecutive rounds passed
+          // without a worthy play, force worthy_playing regardless of votes.
+          const worthyStreak = roundsSinceLastWorthyRef.current;
+          const forcedWorthy = worthyStreak >= WORTHY_FORCE_INTERVAL - 1;
+          const goWorthy = forcedWorthy || (worthyPercent > 49 && quorum > 0);
+
+          if (goWorthy) {
+            roundsSinceLastWorthyRef.current = 0;
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(`olympus-worthy-streak-${room.id}`, "0");
+            }
             // Transition to worthy_playing — full video until it ends (max 6 min fallback)
             const { error: worthyError } = await supabase
               .from("rooms")
@@ -876,8 +928,12 @@ export default function HostPage() {
               .eq("id", room.id);
 
             if (worthyError) throw worthyError;
-            setRoomStatus("The song is worthy! Playing full video now.");
+            setRoomStatus(forcedWorthy ? `Forced worthy after ${WORTHY_FORCE_INTERVAL} rounds — playing full video!` : "The song is worthy! Playing full video now.");
           } else {
+            roundsSinceLastWorthyRef.current += 1;
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(`olympus-worthy-streak-${room.id}`, String(roundsSinceLastWorthyRef.current));
+            }
             const totalRounds = room.total_rounds ?? currentRound?.round_number ?? room.current_round_number;
 
             if ((currentRound?.round_number ?? room.current_round_number) >= totalRounds) {
@@ -1129,6 +1185,18 @@ export default function HostPage() {
     logHostStep("Resetting room", { roomCode: room.code });
 
     try {
+      // Capture played entry IDs before deleting rounds so the next game
+      // can avoid repeating them (play-again deduplication).
+      const { data: playedRoundsData } = await supabase
+        .from("rounds")
+        .select("quiz_entry_id")
+        .eq("room_id", room.id);
+      previousGameEntryIdsRef.current = new Set(
+        ((playedRoundsData ?? []) as { quiz_entry_id: string | null }[])
+          .map((r) => r.quiz_entry_id)
+          .filter(Boolean) as string[],
+      );
+
       await supabase.from("answers").delete().eq("room_id", room.id);
       await supabase.from("rounds").delete().eq("room_id", room.id);
 
@@ -1156,6 +1224,12 @@ export default function HostPage() {
 
       if (roomResetError) {
         throw roomResetError;
+      }
+
+      // Reset worthy streak for this room
+      roundsSinceLastWorthyRef.current = 0;
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(`olympus-worthy-streak-${room.id}`);
       }
 
       preparedRoundRef.current = null;
@@ -1635,6 +1709,33 @@ export default function HostPage() {
 
         {isGameScreen ? (
           <>
+            {room?.status !== "worthy_playing" ? (
+              <section className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                <div
+                  className="rounded-2xl px-4 py-3"
+                  style={{ background: "rgba(13,10,40,0.82)", border: "1px solid rgba(201,151,58,0.26)", backdropFilter: "blur(16px)" }}
+                >
+                  <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Round</p>
+                  <p className="text-xl font-bold" style={{ fontFamily: "var(--font-cinzel)", color: "var(--oly-gold-bright)" }}>
+                    {currentRound?.round_number ?? room?.current_round_number ?? 0}
+                    <span className="ml-1 text-sm text-slate-400">/ {room?.total_rounds ?? "?"}</span>
+                  </p>
+                </div>
+
+                <div className="text-center text-2xl" style={{ color: "var(--oly-gold)" }}>⚡</div>
+
+                <div
+                  className="rounded-2xl px-4 py-3 text-right"
+                  style={{ background: "rgba(13,10,40,0.82)", border: "1px solid rgba(201,151,58,0.26)", backdropFilter: "blur(16px)" }}
+                >
+                  <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Room</p>
+                  <p className="text-xl font-bold tracking-[0.16em]" style={{ fontFamily: "var(--font-cinzel)", color: "var(--oly-gold-bright)" }}>
+                    {room?.code ?? "-----"}
+                  </p>
+                </div>
+              </section>
+            ) : null}
+
             {/* ── Worthy moment: fullscreen video overlay ─────────────────── */}
             {room?.status === "worthy_playing" ? (
               <div
@@ -1730,9 +1831,9 @@ export default function HostPage() {
                 <div className="text-center">
                   <p className="text-xs font-semibold uppercase tracking-[0.28em]" style={{ color: "var(--oly-gold-dim)" }}>{phaseDisplay.badge}</p>
                   {(room?.status === "clip_playing" || room?.status === "answering") && currentRound?.prompt_text ? (
-                    <h1 className="mt-1 text-3xl font-black text-white sm:text-4xl">{currentRound.prompt_text}</h1>
+                    <h1 className="mt-1 text-3xl font-black uppercase text-white sm:text-4xl" style={{ fontFamily: "var(--font-cinzel)", letterSpacing: "0.04em" }}>{currentRound.prompt_text}</h1>
                   ) : (
-                    <h1 className="mt-2 text-3xl font-black text-white sm:text-4xl">{phaseDisplay.title}</h1>
+                    <h1 className="mt-2 text-3xl font-black uppercase text-white sm:text-4xl" style={{ fontFamily: "var(--font-cinzel)", letterSpacing: "0.05em" }}>{phaseDisplay.title}</h1>
                   )}
 
                 </div>
