@@ -75,6 +75,9 @@ export default function AnswerPage() {
         }
         const currentRoom = roomData as Room;
         setRoom(currentRoom);
+        if (currentRoom.total_rounds) {
+          setSelectedTotalRounds(currentRoom.total_rounds as 5 | 25 | 50);
+        }
 
         const { data: players, error: playersError } = await supabase
           .from("room_players")
@@ -138,10 +141,16 @@ export default function AnswerPage() {
           // When the round changes, mine will be undefined and prev will be stale —
           // so clear if the round id doesn't match the previously selected round.
           const mine = normalized.find((a) => a.player_id === activeSession.playerId && a.round_id === roundData!.id);
+          // Capture outside the updater so the comparison is stable
+          const isNewRound = roundData.id !== prevRoundIdRef.current;
           setSelected((prev) => {
             // If DB confirms an answer for this round, use it
             if (mine) return mine.answer_text;
-            // If we have a local optimistic selection, keep it (avoids flicker)
+            // If the round changed, never carry over a stale selection from the
+            // previous round — that is exactly what freezes the answer buttons.
+            if (isNewRound) return null;
+            // If we have a local optimistic selection for THIS round, keep it
+            // (avoids flicker while the DB write is still in-flight).
             if (prev) return prev;
             return null;
           });
@@ -321,6 +330,17 @@ export default function AnswerPage() {
     }
   };
 
+  const handleSelectTotalRounds = async (n: 5 | 25 | 50) => {
+    setSelectedTotalRounds(n);
+    if (supabase && session && room) {
+      try {
+        await supabase.from("rooms").update({ total_rounds: n }).eq("id", room.id);
+      } catch {
+        // Non-critical — local selection still applied
+      }
+    }
+  };
+
   const myRoomPlayer = roomPlayers.find((p) => p.player_id === session?.playerId);
   const isReady = myRoomPlayer?.is_ready === true;
 
@@ -380,7 +400,7 @@ export default function AnswerPage() {
                 <button
                   key={n}
                   type="button"
-                  onClick={() => setSelectedTotalRounds(n)}
+                  onClick={() => void handleSelectTotalRounds(n)}
                   style={{
                     padding: "6px 16px",
                     borderRadius: 8,

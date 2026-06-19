@@ -126,6 +126,14 @@ export default function HostPage() {
   });
   // Prevents the early worthy trigger from firing more than once per round
   const worthyAutoTriggeredRef = useRef(false);
+  // Counts consecutive rounds that ended without a worthy play.
+  // When this reaches 4 (i.e. 4 non-worthy rounds have passed), the next
+  // revealed phase is forced into worthy_playing regardless of votes.
+  // Resets to 0 whenever a worthy play occurs (voted or forced).
+  const roundsSinceLastWorthyRef = useRef(0);
+  // Tracks quiz_entry_id values played in the previous game so they are
+  // excluded from the next game when players choose "Play Again".
+  const previousGameEntryIdsRef = useRef<Set<string>>(new Set());
 
   const [room, setRoom] = useState<Room | null>(null);
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
@@ -137,6 +145,7 @@ export default function HostPage() {
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isAdvancingPhase, setIsAdvancingPhase] = useState(false);
   const [phaseSecondsLeft, setPhaseSecondsLeft] = useState(0);
+  const [selectedTotalRounds, setSelectedTotalRounds] = useState<5 | 25 | 50>(5);
 
   // Pre-loads clip config into state so the single player is always warm when a phase mounts
   const prepareRoundClip = useCallback(
@@ -276,6 +285,9 @@ export default function HostPage() {
         prepareRoundClip(normalizedRound, currentRoom.status);
       }
       setRoom(currentRoom);
+      if (currentRoom.total_rounds) {
+        setSelectedTotalRounds(currentRoom.total_rounds as 5 | 25 | 50);
+      }
       setPlayers((roomPlayers ?? []) as RoomPlayer[]);
       setRound(normalizedRound);
       setAllRounds(normalizedAllRounds);
@@ -548,6 +560,10 @@ export default function HostPage() {
           .map((r) => r.quiz_entry_id)
           .filter(Boolean) as string[],
       );
+      // Also exclude songs from the previous game (play-again deduplication)
+      for (const id of previousGameEntryIdsRef.current) {
+        usedEntryIds.add(id);
+      }
 
       const { data: entries, error: entriesError } = await supabase
         .from("quiz_entries")
@@ -621,9 +637,18 @@ export default function HostPage() {
     if (error) throw error;
   };
 
-  const [selectedTotalRounds, setSelectedTotalRounds] = useState<5 | 25 | 50>(5);
-
   const TOTAL_ROUNDS = selectedTotalRounds;
+
+  const handleSelectTotalRounds = async (n: 5 | 25 | 50) => {
+    setSelectedTotalRounds(n);
+    if (supabase && room) {
+      try {
+        await supabase.from("rooms").update({ total_rounds: n }).eq("id", room.id);
+      } catch {
+        // Non-critical — local selection still applied
+      }
+    }
+  };
 
   const handleStartGame = async () => {
     if (!supabase || !room) return;
@@ -728,14 +753,23 @@ export default function HostPage() {
         const worthyYes = nonHostPlayers.filter((p) => p.worthy_vote === true).length;
         const worthyPct = nonHostPlayers.length > 0 ? (worthyYes / nonHostPlayers.length) * 100 : 0;
 
+        // Forced-worthy rule: if 4 consecutive rounds passed without a worthy play,
+        // this 5th revealed phase skips the vote and forces worthy_playing.
+        const forcedWorthy = roundsSinceLastWorthyRef.current >= 4;
+        const goWorthy = forcedWorthy || (worthyPct > 49 && nonHostPlayers.length > 0);
+
         // Close current round
         if (round) {
           await supabase.from("rounds").update({ state: "closed" }).eq("id", round.id);
         }
 
-        if (worthyPct > 49 && nonHostPlayers.length > 0) {
+        if (goWorthy) {
+          // Reset counter — a worthy play (voted or forced) breaks the streak
+          roundsSinceLastWorthyRef.current = 0;
           await setRoomPhase("worthy_playing", DEFAULT_WORTHY_PLAYING_MAX_SECONDS); // 6-min fallback; also ends when video ends via onVideoEnded
         } else {
+          // No worthy this round — increment the streak counter
+          roundsSinceLastWorthyRef.current += 1;
           const totalRounds = room.total_rounds ?? TOTAL_ROUNDS;
           if ((room.current_round_number ?? 0) >= totalRounds) {
             // Finish game — reset is_ready so players can vote to play again
@@ -778,6 +812,17 @@ export default function HostPage() {
     try {
       await supabase.from("room_players").update({ is_ready: false, worthy_vote: null }).eq("room_id", room.id).eq("is_host", false);
       worthyAutoTriggeredRef.current = false;
+      roundsSinceLastWorthyRef.current = 0;
+      // Remember which entries were played this game so the next game doesn't repeat them.
+      const { data: prevRoundsData } = await supabase
+        .from("rounds")
+        .select("quiz_entry_id")
+        .eq("room_id", room.id);
+      previousGameEntryIdsRef.current = new Set(
+        ((prevRoundsData ?? []) as { quiz_entry_id: string | null }[])
+          .map((r) => r.quiz_entry_id)
+          .filter(Boolean) as string[],
+      );
       // Delete all existing rounds for this room — answers cascade automatically via FK.
       // This clears the unique(room_id, round_number) constraint so we can start from 1 again.
       await supabase.from("rounds").delete().eq("room_id", room.id);
@@ -989,7 +1034,7 @@ export default function HostPage() {
               <button
                 key={n}
                 type="button"
-                onClick={() => setSelectedTotalRounds(n)}
+                onClick={() => void handleSelectTotalRounds(n)}
                 style={{
                   padding: "6px 20px",
                   borderRadius: 8,
