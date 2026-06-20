@@ -101,13 +101,6 @@ export default function AnswerPage() {
         })) as Round[]);
         setAllRounds(normalizedRounds);
 
-        // Reset selection only when switching to a different round (not on every poll)
-        setSelected((prev) => {
-          // We don't know the new round id yet here, so keep prev and let the
-          // per-round answer lookup below correct it if needed.
-          return prev;
-        });
-
         let roundData: RoundRow | null = null;
         if (currentRoom.current_round_id) {
           roundData = (normalizedRounds.find((roundItem) => roundItem.id === currentRoom.current_round_id) as RoundRow | undefined) ?? null;
@@ -126,6 +119,29 @@ export default function AnswerPage() {
 
         if (roundData) {
           roundData.answer_options = Array.isArray(roundData.answer_options) ? roundData.answer_options : [];
+
+          // Detect round change BEFORE setRound and BEFORE any await so that
+          // prevRoundIdRef is updated atomically with the selection clear.
+          // Previously, isNewRound was computed AFTER the answers-fetch await, by
+          // which time the [round?.id] useEffect had already updated prevRoundIdRef
+          // (triggered by the setRound call above the await), causing
+          // isNewRound = false and letting the stale selection survive into the
+          // new round — freezing the answer buttons.
+          const prevRoundId = prevRoundIdRef.current;
+          const isNewRound = roundData.id !== prevRoundId;
+          if (isNewRound) {
+            // Update ref immediately (before any await) so concurrent loadBundle
+            // calls also see isNewRound = false and won't re-enter this branch.
+            prevRoundIdRef.current = roundData.id;
+            // Clear selection before setRound + await so no render frame shows
+            // the new round with a stale answer highlighted.
+            setSelected(null);
+            console.debug('[AnswerPage] Round transition — selection cleared', {
+              previousRoundId: prevRoundId,
+              currentRoundId: roundData.id,
+            });
+          }
+
           setRound(roundData);
 
           const { data: allAnswers, error: answersError } = await supabase
@@ -136,24 +152,20 @@ export default function AnswerPage() {
           const normalized = (allAnswers ?? []) as RoundAnswer[];
           setAnswers(normalized);
 
-          // Restore selection from DB, but never clear a locally-set selection
-          // (avoids flicker when the DB write hasn't landed yet after tapping).
-          // When the round changes, mine will be undefined and prev will be stale —
-          // so clear if the round id doesn't match the previously selected round.
+          // After the async fetch: restore from DB if the player already answered
+          // this round (e.g. after a page reload or reconnect). Don't override an
+          // optimistic selection the player just made (the DB write may still be
+          // in-flight for a moment after tapping).
           const mine = normalized.find((a) => a.player_id === activeSession.playerId && a.round_id === roundData!.id);
-          // Capture outside the updater so the comparison is stable
-          const isNewRound = roundData.id !== prevRoundIdRef.current;
-          setSelected((prev) => {
-            // If DB confirms an answer for this round, use it
-            if (mine) return mine.answer_text;
-            // If the round changed, never carry over a stale selection from the
-            // previous round — that is exactly what freezes the answer buttons.
-            if (isNewRound) return null;
-            // If we have a local optimistic selection for THIS round, keep it
-            // (avoids flicker while the DB write is still in-flight).
-            if (prev) return prev;
-            return null;
-          });
+          if (mine) {
+            setSelected(mine.answer_text);
+            console.debug('[AnswerPage] Restored answer from DB', {
+              roundId: roundData.id,
+              answerText: mine.answer_text,
+            });
+          }
+          // If mine is null: selection is either null (cleared above for a new
+          // round) or an optimistic value from THIS round — both are correct.
         } else {
           setRound(null);
           setAnswers([]);
@@ -206,6 +218,13 @@ export default function AnswerPage() {
   const prevRoundIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (round?.id && round.id !== prevRoundIdRef.current) {
+      // Safety-net: loadBundle normally clears selection and updates prevRoundIdRef
+      // before calling setRound, so this branch should rarely fire. If it does,
+      // it means loadBundle missed the transition — sync the ref and clear now.
+      console.debug('[AnswerPage] useEffect safety-net: round changed in committed state', {
+        previousRoundId: prevRoundIdRef.current,
+        currentRoundId: round.id,
+      });
       prevRoundIdRef.current = round.id;
       setSelected(null);
     }
