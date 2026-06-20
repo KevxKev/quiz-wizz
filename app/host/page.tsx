@@ -127,7 +127,7 @@ export default function HostPage() {
   // Prevents the early worthy trigger from firing more than once per round
   const worthyAutoTriggeredRef = useRef(false);
   // Counts consecutive rounds that ended without a worthy play.
-  // When this reaches 4 (i.e. 4 non-worthy rounds have passed), the next
+  // When this reaches 7 (i.e. 7 non-worthy rounds have passed), the next
   // revealed phase is forced into worthy_playing regardless of votes.
   // Resets to 0 whenever a worthy play occurs (voted or forced).
   const roundsSinceLastWorthyRef = useRef(0);
@@ -753,9 +753,9 @@ export default function HostPage() {
         const worthyYes = nonHostPlayers.filter((p) => p.worthy_vote === true).length;
         const worthyPct = nonHostPlayers.length > 0 ? (worthyYes / nonHostPlayers.length) * 100 : 0;
 
-        // Forced-worthy rule: if 4 consecutive rounds passed without a worthy play,
-        // this 5th revealed phase skips the vote and forces worthy_playing.
-        const forcedWorthy = roundsSinceLastWorthyRef.current >= 4;
+        // Forced-worthy rule: if 7 consecutive rounds passed without a worthy play,
+        // this 8th revealed phase skips the vote and forces worthy_playing.
+        const forcedWorthy = roundsSinceLastWorthyRef.current >= 7;
         const goWorthy = forcedWorthy || (worthyPct > 49 && nonHostPlayers.length > 0);
 
         // Close current round
